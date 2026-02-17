@@ -22,12 +22,14 @@ incremental from the start.
 
 ### Golden Copy
 
-A maintained checkout of the repository with warm build state:
+A checkout of the repository with warm build state. Grove is
+branch-agnostic — the golden copy is simply "whatever is on disk right
+now." If you need golden copies for multiple branches, use git worktrees
+to maintain separate checkouts and `grove init` each one independently.
 
-- Checked out on a base branch (typically `main`)
-- Has been built recently (`./gradlew assemble` or equivalent)
+- Has been built recently (warm caches, compiled outputs)
 - Contains all gitignored build artifacts (`.gradle/`, `build/`, etc.)
-- One golden copy per registered repo (multiple base branches not in scope for v1)
+- Grove doesn't manage which branch is checked out — that's up to you
 
 ### Workspace
 
@@ -64,8 +66,7 @@ grove status                  Show golden copy info and workspace summary
 Registers an existing git repo as a grove-managed golden copy.
 
 - `path` defaults to current directory
-- Creates a `.grove/` directory in the repo root to store config
-- Records the repo path in the global grove config (`~/.grove/config.json`)
+- Creates a `.grove/` directory in the repo root to store config and hooks
 - Optionally runs an initial warm-up build (configurable command)
 - **Error**: if golden copy has uncommitted changes, warn and require `--force`
 
@@ -73,7 +74,6 @@ Config stored in `.grove/config.json`:
 ```json
 {
   "warmup_command": "./gradlew assemble",
-  "branch": "main",
   "workspace_dir": "/tmp/grove/{project}",
   "max_workspaces": 10
 }
@@ -85,9 +85,8 @@ A convenience command to refresh the golden copy. Not a core workflow
 requirement — workspaces are short-lived, so staleness is managed by
 the user re-running `update` when they choose to.
 
-1. `git pull` on the configured base branch
+1. `git pull`
 2. Run the configured warmup command
-3. Run post-update hooks
 
 ### `grove create [--branch NAME]`
 
@@ -96,7 +95,7 @@ Creates a new workspace:
 1. Verify filesystem supports CoW (error out if not — see [Error Handling](#error-handling))
 2. Check golden copy for uncommitted changes (warn + require `--force`)
 3. CoW clone golden copy to workspace directory
-4. Write workspace marker file (`.grove-workspace.json`)
+4. Write workspace marker file (`.grove/workspace.json`)
 5. Run post-clone hooks (`.grove/hooks/post-clone`)
 6. Check out the specified branch (or create one)
 7. Output workspace path (plain text default, `--json` for machine-readable)
@@ -131,40 +130,27 @@ with `--push`.
 
 ## Metadata & State
 
-### Global Config (`~/.grove/config.json`)
-
-Registry of golden copies and global defaults:
-
-```json
-{
-  "golden_copies": {
-    "/Users/chris/dev/myapp": {
-      "project": "myapp",
-      "workspace_dir": "/tmp/grove/myapp"
-    }
-  }
-}
-```
+All grove state lives in the `.grove/` directory within the repo. There
+is no global config — grove commands operate on the repo you're in (or
+the one you point at with `--path`).
 
 ### Project Config (`.grove/config.json`)
 
-Lives in the golden copy repo root. Project-specific settings:
+Lives in the repo root. Should be committed so all users share the
+same config:
 
 ```json
 {
   "warmup_command": "./gradlew assemble",
-  "branch": "main",
   "workspace_dir": "/tmp/grove/{project}",
   "max_workspaces": 10
 }
 ```
 
-Should be committed to the repo so all users share the same config.
+### Workspace Marker (`.grove/workspace.json`)
 
-### Workspace Marker (`.grove-workspace.json`)
-
-Written into each workspace after cloning. Enables `grove list` to
-discover workspaces and track provenance:
+Written into each workspace's `.grove/` directory after cloning. Enables
+`grove list` to discover workspaces and track provenance:
 
 ```json
 {
@@ -176,14 +162,15 @@ discover workspaces and track provenance:
 }
 ```
 
-This file should be in `.gitignore` so it's never committed.
+The presence of `workspace.json` is what distinguishes a workspace from
+a golden copy — golden copies don't have this file.
 
 ### Design Principle: No Daemon
 
 Grove is stateless between invocations. All metadata is derived from:
-- Global config file (golden copy registry)
-- Project config file (per-repo settings)
-- Workspace marker files (per-workspace provenance)
+- `.grove/config.json` (project settings)
+- `.grove/workspace.json` (workspace provenance, only in workspaces)
+- `.grove/hooks/` (lifecycle scripts)
 - Filesystem state (directory existence, git branch)
 
 ## Hooks
@@ -212,11 +199,6 @@ Example for a generic project:
 # Clean Python bytecode caches with embedded paths
 find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 ```
-
-### `post-update` (future)
-
-Runs after `grove update` refreshes the golden copy. Could be used to
-re-warm caches or notify systems.
 
 ### Why hooks instead of config patterns?
 
@@ -280,38 +262,25 @@ clone strategy. Unsupported filesystems produce an error (no fallback).
 - **Linux**: Check `/proc/mounts` or `stat -f` for Btrfs/XFS, then
   attempt a test reflink to verify support
 
-## Build System Considerations
+## Build System Notes
 
-### Gradle
+Grove is build-system agnostic. It clones directories and runs hooks —
+it has no knowledge of any specific build tool. The `post-clone` hook
+is where build-system-specific cleanup belongs.
 
-Gradle's configuration cache **is not relocatable** — it embeds absolute
-paths with no rewrite mechanism. The Gradle team acknowledges this as a
-limitation with no timeline for a fix.
+The main thing to watch for: **non-relocatable caches** that embed
+absolute paths. When the workspace path differs from the golden copy
+path, these caches become invalid. Most build systems handle this
+gracefully (cache miss, rebuild that portion), but stale lock files
+can cause errors.
 
-Recommended `post-clone` hook strategy:
+Common patterns for `post-clone` hooks:
+- Delete lock files (e.g., `find . -name "*.lock" -delete`)
+- Delete caches that embed absolute paths (let the build system
+  regenerate them)
+- Leave relocatable caches alone (compiled outputs, dependency caches)
 
-| Cache | Relocatable? | Action |
-|---|---|---|
-| `.gradle/configuration-cache/` | **No** — absolute paths | Delete in post-clone hook |
-| `.gradle/*.lock` | N/A — stale locks | Delete in post-clone hook |
-| `.gradle/caches/` | Yes | Keep (dependency metadata, huge speedup) |
-| `.gradle/buildOutputCleanup/` | Mostly | Keep, monitor |
-| `build/` directories | Yes | Keep (compiled classes, main speedup) |
-| `local.properties` | Yes (if SDK path is stable) | Keep |
-
-Deleting the configuration cache adds ~5-10s to the first build in each
-workspace. This is a good tradeoff: the dependency cache and compiled
-outputs (which *are* kept) save minutes.
-
-### Other Build Systems
-
-| Build System | What to clean | Notes |
-|---|---|---|
-| Node.js | Nothing | `node_modules` is relocatable |
-| Rust/Cargo | Nothing | `target/` is relocatable |
-| Python | `__pycache__/` | May contain absolute path references |
-| CMake | `CMakeCache.txt` | Contains absolute paths to compilers |
-| Bazel | Nothing (usually) | Outputs are content-addressed |
+Build-system-specific integrations may be explored in the future.
 
 ## Project Structure
 
@@ -322,7 +291,7 @@ grove/
 │       └── main.go           # Entry point, cobra root command
 ├── internal/
 │   ├── config/
-│   │   └── config.go         # Config loading/saving (.grove/ and ~/.grove/)
+│   │   └── config.go         # Config loading/saving (.grove/config.json)
 │   ├── golden/
 │   │   └── golden.go         # Golden copy management (init, update)
 │   ├── workspace/
@@ -349,8 +318,8 @@ grove/
 
 **`cmd/grove`**: Cobra CLI setup. Thin — delegates to internal packages.
 
-**`internal/config`**: Loads/saves both global (`~/.grove/config.json`) and
-project (`.grove/config.json`) configs. Handles defaults and validation.
+**`internal/config`**: Loads/saves `.grove/config.json`. Handles defaults
+and validation.
 
 **`internal/golden`**: Manages the golden copy — init (register + warmup),
 update (pull + rebuild), status (commit info, freshness).
@@ -372,7 +341,7 @@ branch operations, dirty-state detection.
 
 - **`grove exec <command>`**: Run a command in a new workspace, destroy on exit
 - **`grove watch`**: Auto-update golden copy when base branch changes
-- **Multiple golden copies**: Support different base branches per repo
 - **Disk usage tracking**: Show CoW savings (`grove status --disk`)
+- **Build system integrations**: Deeper awareness of specific build tools
 - **Integration with AI agent frameworks**: Skills, MCP tools, env vars
 - **`--json` everywhere**: Machine-readable output for all commands
