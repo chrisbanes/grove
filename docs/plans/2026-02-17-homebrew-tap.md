@@ -31,7 +31,7 @@ homebrew_casks:
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Casks
-    homepage: "https://github.com/AmpInc/grove"
+    homepage: "https://github.com/chrisbanes/grove"
     description: "Manage CoW-cloned workspaces with warm build caches"
     license: "MIT"
     commit_author:

@@ -50,7 +50,7 @@ Grove uses git under the hood. It replaces only the step where you create a new 
 brew install chrisbanes/tap/grove
 
 # Go install
-go install github.com/AmpInc/grove/cmd/grove@latest
+go install github.com/chrisbanes/grove/cmd/grove@latest
 
 # Or download a binary from the latest release:
 # https://github.com/chrisbanes/grove/releases
