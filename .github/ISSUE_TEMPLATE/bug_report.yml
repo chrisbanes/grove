@@ -1,0 +1,78 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in Grove
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the
+        information below to help us reproduce and fix the issue.
+
+  - type: input
+    id: grove-version
+    attributes:
+      label: Grove Version
+      description: Output of `grove version`
+      placeholder: "grove v0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: macOS Version
+      description: Output of `sw_vers -productVersion`
+      placeholder: "15.3"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: "Describe what you expected to happen and what actually happened."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the behavior.
+      value: |
+        1. Run `grove init` in a repo
+        2. Run `grove create --branch test`
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Command output
+      description: Paste the full terminal output, including any error messages.
+      render: shell
+    validations:
+      required: false
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation method
+      options:
+        - Homebrew (brew install chrisbanes/tap/grove)
+        - go install
+        - Binary download from releases
+        - Built from source
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Any additional information (filesystem details, repo size, workaround found, etc.)
+    validations:
+      required: false
