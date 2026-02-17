@@ -98,3 +98,20 @@ func TestCheckout_NewBranch(t *testing.T) {
 		t.Errorf("expected feature/test, got %s", branch)
 	}
 }
+
+func TestCheckout_ExistingBranch(t *testing.T) {
+	repo := setupRepo(t)
+	// Create a branch, then switch back to original
+	git.Checkout(repo, "feature/test", true)
+	run(t, repo, "git", "checkout", "-")
+
+	// Now checkout the existing branch without create flag
+	err := git.Checkout(repo, "feature/test", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	branch, _ := git.CurrentBranch(repo)
+	if branch != "feature/test" {
+		t.Errorf("expected feature/test, got %s", branch)
+	}
+}
