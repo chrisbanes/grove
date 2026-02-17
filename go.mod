@@ -1,4 +1,4 @@
-module github.com/AmpInc/grove
+module github.com/chrisbanes/grove
 
 go 1.25.0
 

@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/AmpInc/grove/internal/config"
-	gitpkg "github.com/AmpInc/grove/internal/git"
+	"github.com/chrisbanes/grove/internal/config"
+	gitpkg "github.com/chrisbanes/grove/internal/git"
 	"github.com/spf13/cobra"
 )
 

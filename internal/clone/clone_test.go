@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/AmpInc/grove/internal/clone"
+	"github.com/chrisbanes/grove/internal/clone"
 )
 
 func TestNewCloner_ReturnsCloner(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/AmpInc/grove/internal/git"
+	"github.com/chrisbanes/grove/internal/git"
 )
 
 func setupRepo(t *testing.T) string {

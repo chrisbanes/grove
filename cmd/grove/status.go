@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AmpInc/grove/internal/config"
-	gitpkg "github.com/AmpInc/grove/internal/git"
-	"github.com/AmpInc/grove/internal/workspace"
+	"github.com/chrisbanes/grove/internal/config"
+	gitpkg "github.com/chrisbanes/grove/internal/git"
+	"github.com/chrisbanes/grove/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
