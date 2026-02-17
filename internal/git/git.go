@@ -44,6 +44,12 @@ func Pull(path string) error {
 	return cmd.Run()
 }
 
+// Push pushes a branch to origin.
+func Push(path, branch string) error {
+	cmd := exec.Command("git", "-C", path, "push", "-u", "origin", branch)
+	return cmd.Run()
+}
+
 func Checkout(path, branch string, create bool) error {
 	args := []string{"-C", path, "checkout"}
 	if create {
