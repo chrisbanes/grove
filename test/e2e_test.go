@@ -181,7 +181,9 @@ func TestPostCloneHook(t *testing.T) {
 
 	// Create a post-clone hook that creates a marker file
 	hookPath := filepath.Join(repo, ".grove", "hooks", "post-clone")
-	os.WriteFile(hookPath, []byte("#!/bin/bash\ntouch hook-executed\n"), 0755)
+	if err := os.WriteFile(hookPath, []byte("#!/bin/bash\ntouch hook-executed\n"), 0755); err != nil {
+		t.Fatalf("failed to write hook: %v", err)
+	}
 
 	out := grove(t, binary, repo, "create", "--json")
 	var info workspace.Info
@@ -284,7 +286,9 @@ func TestCreateEdgeCases(t *testing.T) {
 		grove(t, binary, repo, "init")
 		out := grove(t, binary, repo, "create", "--json")
 		var info workspace.Info
-		json.Unmarshal([]byte(out), &info)
+		if err := json.Unmarshal([]byte(out), &info); err != nil {
+			t.Fatalf("invalid JSON from create: %s\n%s", err, out)
+		}
 
 		errOut := groveExpectErr(t, binary, info.Path, "create")
 		if !strings.Contains(errOut, "cannot create a workspace from inside another workspace") {
@@ -319,7 +323,9 @@ func TestCreateEdgeCases(t *testing.T) {
 		grove(t, binary, repo, "init")
 
 		hookPath := filepath.Join(repo, ".grove", "hooks", "post-clone")
-		os.WriteFile(hookPath, []byte("#!/bin/bash\nexit 1\n"), 0755)
+		if err := os.WriteFile(hookPath, []byte("#!/bin/bash\nexit 1\n"), 0755); err != nil {
+			t.Fatalf("failed to write hook: %v", err)
+		}
 
 		errOut := groveExpectErr(t, binary, repo, "create")
 		if !strings.Contains(errOut, "post-clone hook failed") {
@@ -341,7 +347,9 @@ func TestCreateEdgeCases(t *testing.T) {
 
 		out := grove(t, binary, repo, "create", "--json")
 		var info workspace.Info
-		json.Unmarshal([]byte(out), &info)
+		if err := json.Unmarshal([]byte(out), &info); err != nil {
+			t.Fatalf("invalid JSON from create: %s\n%s", err, out)
+		}
 
 		wsCommit := run(t, info.Path, "git", "rev-parse", "--short", "HEAD")
 		if wsCommit != goldenCommit {
@@ -409,11 +417,15 @@ func TestMultiWorkspaceIsolation(t *testing.T) {
 	// Create two workspaces
 	out1 := grove(t, binary, repo, "create", "--json", "--branch", "ws1-branch")
 	var ws1 workspace.Info
-	json.Unmarshal([]byte(out1), &ws1)
+	if err := json.Unmarshal([]byte(out1), &ws1); err != nil {
+		t.Fatalf("invalid JSON from create (ws1): %s\n%s", err, out1)
+	}
 
 	out2 := grove(t, binary, repo, "create", "--json", "--branch", "ws2-branch")
 	var ws2 workspace.Info
-	json.Unmarshal([]byte(out2), &ws2)
+	if err := json.Unmarshal([]byte(out2), &ws2); err != nil {
+		t.Fatalf("invalid JSON from create (ws2): %s\n%s", err, out2)
+	}
 
 	// Modify workspace 1
 	os.WriteFile(filepath.Join(ws1.Path, "ws1-only.txt"), []byte("ws1"), 0644)
@@ -477,11 +489,15 @@ func TestListOutput(t *testing.T) {
 
 		out1 := grove(t, binary, repo, "create", "--json")
 		var info1 workspace.Info
-		json.Unmarshal([]byte(out1), &info1)
+		if err := json.Unmarshal([]byte(out1), &info1); err != nil {
+			t.Fatalf("invalid JSON from create: %s\n%s", err, out1)
+		}
 
 		out2 := grove(t, binary, repo, "create", "--json", "--branch", "feature-x")
 		var info2 workspace.Info
-		json.Unmarshal([]byte(out2), &info2)
+		if err := json.Unmarshal([]byte(out2), &info2); err != nil {
+			t.Fatalf("invalid JSON from create: %s\n%s", err, out2)
+		}
 
 		listOut := grove(t, binary, repo, "list", "--json")
 		var list []workspace.Info
@@ -527,8 +543,12 @@ func TestStatusOutput(t *testing.T) {
 		grove(t, binary, repo, "init")
 		out := grove(t, binary, repo, "create", "--json")
 		var info workspace.Info
-		json.Unmarshal([]byte(out), &info)
+		if err := json.Unmarshal([]byte(out), &info); err != nil {
+			t.Fatalf("invalid JSON from create: %s\n%s", err, out)
+		}
 
+		// grove status from inside the workspace finds the workspace's .grove/config.json
+		// (CoW clone includes it) and detects workspace.json → prints the warning.
 		statusOut := grove(t, binary, info.Path, "status")
 		if !strings.Contains(statusOut, "You are inside a grove workspace") {
 			t.Errorf("expected workspace warning, got: %s", statusOut)
@@ -618,11 +638,10 @@ func TestListJsonEmpty(t *testing.T) {
 	grove(t, binary, repo, "init")
 
 	out := strings.TrimSpace(grove(t, binary, repo, "list", "--json"))
-	// Should be valid JSON (either "null" or "[]"), not human-readable text
-	if out != "null" && out != "[]" {
-		var list []workspace.Info
-		if err := json.Unmarshal([]byte(out), &list); err != nil {
-			t.Errorf("list --json with no workspaces is not valid JSON: %s", out)
-		}
+	// json.MarshalIndent on a nil slice returns "null". This is the current known
+	// behavior. The test guards against the human-readable "No active workspaces."
+	// string leaking into --json output, which would break machine consumers.
+	if out == "No active workspaces." || !json.Valid([]byte(out)) {
+		t.Errorf("list --json with no workspaces must be valid JSON, got: %s", out)
 	}
 }
