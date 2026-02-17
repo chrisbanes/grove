@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/AmpInc/grove/internal/clone"
-	"github.com/AmpInc/grove/internal/config"
+	"github.com/chrisbanes/grove/internal/clone"
+	"github.com/chrisbanes/grove/internal/config"
 )
 
 // Info holds metadata about a workspace.

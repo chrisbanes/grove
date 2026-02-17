@@ -6,11 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AmpInc/grove/internal/clone"
-	"github.com/AmpInc/grove/internal/config"
-	gitpkg "github.com/AmpInc/grove/internal/git"
-	"github.com/AmpInc/grove/internal/hooks"
-	"github.com/AmpInc/grove/internal/workspace"
+	"github.com/chrisbanes/grove/internal/clone"
+	"github.com/chrisbanes/grove/internal/config"
+	gitpkg "github.com/chrisbanes/grove/internal/git"
+	"github.com/chrisbanes/grove/internal/hooks"
+	"github.com/chrisbanes/grove/internal/workspace"
 	"github.com/spf13/cobra"
 )
 

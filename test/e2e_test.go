@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AmpInc/grove/internal/config"
-	"github.com/AmpInc/grove/internal/workspace"
+	"github.com/chrisbanes/grove/internal/config"
+	"github.com/chrisbanes/grove/internal/workspace"
 )
 
 func buildGrove(t *testing.T) string {

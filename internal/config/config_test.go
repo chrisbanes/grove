@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/AmpInc/grove/internal/config"
+	"github.com/chrisbanes/grove/internal/config"
 )
 
 func TestDefaultConfig(t *testing.T) {

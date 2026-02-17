@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/AmpInc/grove/internal/hooks"
+	"github.com/chrisbanes/grove/internal/hooks"
 )
 
 func TestRun_HookExists(t *testing.T) {
