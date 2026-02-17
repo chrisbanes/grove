@@ -337,11 +337,209 @@ Handles permissions, timeouts, error reporting.
 **`internal/git`**: Thin wrapper around `git` CLI for checkout, pull,
 branch operations, dirty-state detection.
 
+## Claude Code Skills Integration
+
+Grove ships a companion repo (`grove-skills`) containing superpowers-compatible
+skills for Claude Code. The skills and CLI are separate projects with different
+distribution paths:
+
+- **`grove`** — Go CLI tool. Installed via `go install` / `brew` / binary release.
+- **`grove-skills`** — Markdown skill files. Installed via `npx skills add` or
+  copied to `~/.claude/skills/`.
+
+The coupling between them is the CLI's `--json` output — a stable interface
+that skills parse.
+
+### Why separate repos?
+
+- Different audiences: CLI is system-wide, skills are per-Claude-Code-user
+- Different distribution: `go install` vs `npx skills add`
+- Different versioning: a skill rewrite doesn't need a new CLI release
+- Keeps the Go project clean
+
+### Relationship to superpowers `using-git-worktrees`
+
+The `using-grove` skill is a **replacement** for superpowers'
+`using-git-worktrees` skill, not a complement. Users should disable
+`using-git-worktrees` when using grove. The skill hooks into the same
+trigger keywords (isolation, workspace, feature work) so it gets invoked
+by the same upstream skills (`brainstorming`, `subagent-driven-development`,
+`executing-plans`).
+
+If grove is not initialized in the current repo (no `.grove/` directory),
+the skill tells the user to run `grove init` rather than silently falling
+back to plain worktrees.
+
+### Skill: `using-grove`
+
+**Trigger**: Starting feature work that needs isolation, creating a workspace
+for an agent, before executing implementation plans.
+
+**Replaces**: `using-git-worktrees` (user must disable that skill).
+
+**Frontmatter**:
+```yaml
+---
+name: using-grove
+description: "Use when starting feature work that needs isolation or before
+  executing implementation plans - creates CoW-cloned workspaces with warm
+  build caches via grove CLI"
+---
+```
+
+**Workflow**:
+
+1. **Verify grove is initialized**
+   ```bash
+   # Check for .grove/ directory in repo root
+   test -d "$(git rev-parse --show-toplevel)/.grove"
+   ```
+   If not found: "Grove is not initialized in this repo. Run `grove init`
+   to set up a golden copy first."
+
+2. **Verify grove CLI is installed**
+   ```bash
+   command -v grove
+   ```
+   If not found: "Grove CLI is not installed. See https://github.com/user/grove
+   for installation instructions."
+
+3. **Create workspace**
+   ```bash
+   grove create --branch <branch-name> --json
+   ```
+   Parse JSON output for workspace path.
+
+4. **Change to workspace directory**
+   ```bash
+   cd <workspace-path>
+   ```
+
+5. **Verify clean baseline**
+   Run project's test suite. If tests fail, report and ask whether to proceed.
+
+6. **Report ready**
+   ```
+   Grove workspace ready at <path>
+   Branch: <branch-name>
+   Build state: warm (cloned from golden copy)
+   Tests: passing (<N> tests)
+   ```
+
+**Integration**:
+- Called by: `brainstorming` (Phase 4), `subagent-driven-development`,
+  `executing-plans`
+- Pairs with: `finishing-grove-workspace`
+
+### Skill: `finishing-grove-workspace`
+
+**Trigger**: Implementation is complete, all tests pass, ready to integrate
+work and clean up the workspace.
+
+**Replaces**: The worktree cleanup portion of `finishing-a-development-branch`.
+
+**Frontmatter**:
+```yaml
+---
+name: finishing-grove-workspace
+description: "Use when implementation is complete and all tests pass in a
+  grove workspace - guides branch completion and workspace cleanup via
+  grove CLI"
+---
+```
+
+**Workflow**:
+
+1. **Detect grove workspace**
+   ```bash
+   # Check for workspace marker
+   test -f "$(git rev-parse --show-toplevel)/.grove/workspace.json"
+   ```
+   If not in a workspace: "Not in a grove workspace. Use
+   `finishing-a-development-branch` instead."
+
+2. **Verify tests pass**
+   Run project's test suite. If tests fail, stop — don't offer completion
+   options.
+
+3. **Read workspace metadata**
+   ```bash
+   cat .grove/workspace.json
+   ```
+   Extract workspace ID, golden copy path, branch name.
+
+4. **Present options**
+   ```
+   Implementation complete. What would you like to do?
+
+   1. Push branch and create a Pull Request
+   2. Push branch and destroy workspace
+   3. Keep the workspace as-is (I'll handle it later)
+   4. Discard this work and destroy workspace
+   ```
+
+5. **Execute choice**
+
+   **Option 1: Push + PR**
+   ```bash
+   git push -u origin <branch>
+   gh pr create --title "<title>" --body "<body>"
+   grove destroy <workspace-id>
+   ```
+   Change back to golden copy directory.
+
+   **Option 2: Push + destroy**
+   ```bash
+   git push -u origin <branch>
+   grove destroy <workspace-id>
+   ```
+   Change back to golden copy directory.
+
+   **Option 3: Keep as-is**
+   Report: "Keeping workspace at <path>."
+
+   **Option 4: Discard**
+   Require typed confirmation ("discard").
+   ```bash
+   grove destroy <workspace-id>
+   ```
+   Change back to golden copy directory.
+
+**Integration**:
+- Called by: `subagent-driven-development` (Step 7),
+  `executing-plans` (Step 5)
+- Pairs with: `using-grove`
+
+### Skill interaction flow
+
+```
+brainstorming / executing-plans / subagent-driven-development
+  │
+  ├─ needs workspace isolation
+  │
+  ▼
+using-grove                          (replaces using-git-worktrees)
+  │
+  ├─ grove create --branch <name>
+  ├─ cd into workspace
+  ├─ verify tests
+  │
+  ▼
+[... agent does work ...]
+  │
+  ▼
+finishing-grove-workspace            (replaces worktree cleanup)
+  │
+  ├─ verify tests
+  ├─ present options (PR / push / keep / discard)
+  ├─ grove destroy
+  └─ cd back to golden copy
+```
+
 ## Future Possibilities
 
 - **`grove exec <command>`**: Run a command in a new workspace, destroy on exit
 - **`grove watch`**: Auto-update golden copy when base branch changes
 - **Disk usage tracking**: Show CoW savings (`grove status --disk`)
 - **Build system integrations**: Deeper awareness of specific build tools
-- **Integration with AI agent frameworks**: Skills, MCP tools, env vars
 - **`--json` everywhere**: Machine-readable output for all commands
