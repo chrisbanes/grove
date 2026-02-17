@@ -20,6 +20,20 @@ archives:
       - LICENSE
       - README.md
 
+homebrew_casks:
+  - name: grove
+    repository:
+      owner: chrisbanes
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: "https://github.com/AmpInc/grove"
+    description: "Manage CoW-cloned workspaces with warm build caches"
+    license: "MIT"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+
 checksum:
   name_template: "checksums.txt"
 
