@@ -13,6 +13,17 @@ builds:
     ldflags:
       - -s -w -X main.version={{.Version}}
 
+signs:
+  - cmd: codesign
+    args:
+      - "--force"
+      - "--options"
+      - "runtime"
+      - "--sign"
+      - "{{ .Env.APPLE_DEVELOPER_ID }}"
+      - "${artifact}"
+    artifacts: binary
+
 archives:
   - format: tar.gz
     name_template: "grove_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
