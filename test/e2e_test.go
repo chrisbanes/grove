@@ -396,6 +396,27 @@ func TestDestroyEdgeCases(t *testing.T) {
 		}
 	})
 
+	t.Run("push-failure-does-not-destroy", func(t *testing.T) {
+		repo := setupTestRepo(t)
+		grove(t, binary, repo, "init")
+
+		createOut := grove(t, binary, repo, "create", "--json", "--branch", "feature/push-check")
+		var info workspace.Info
+		if err := json.Unmarshal([]byte(createOut), &info); err != nil {
+			t.Fatalf("invalid JSON from create: %s\n%s", err, createOut)
+		}
+
+		errOut := groveExpectErr(t, binary, repo, "destroy", "--push", info.ID)
+		if !strings.Contains(errOut, "push failed") {
+			t.Errorf("expected push failure message, got: %s", errOut)
+		}
+		if _, err := os.Stat(info.Path); err != nil {
+			t.Errorf("workspace should remain after push failure, got: %v", err)
+		}
+
+		grove(t, binary, repo, "destroy", info.ID)
+	})
+
 	t.Run("no-args-no-all", func(t *testing.T) {
 		repo := setupTestRepo(t)
 		grove(t, binary, repo, "init")

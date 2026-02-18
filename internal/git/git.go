@@ -55,7 +55,11 @@ func Pull(path string) error {
 // Push pushes a branch to origin.
 func Push(path, branch string) error {
 	cmd := exec.Command("git", "-C", path, "push", "-u", "origin", branch)
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git push: %w\n%s", err, out)
+	}
+	return nil
 }
 
 // Checkout checks out a branch. If create is true, creates a new branch.
@@ -66,5 +70,9 @@ func Checkout(path, branch string, create bool) error {
 	}
 	args = append(args, branch)
 	cmd := exec.Command("git", args...)
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git checkout: %w\n%s", err, out)
+	}
+	return nil
 }
