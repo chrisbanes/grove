@@ -63,34 +63,19 @@ if [ "$grove_type" = "workspace" ]; then
         ws_branch="$(python3 -c "import json,sys; d=json.load(open('$workspace_json')); print(d.get('branch',''))" 2>/dev/null || true)"
     fi
 
-    context_message="You are in a Grove workspace."
-    if [ -n "$ws_id" ]; then
-        context_message="${context_message} Workspace ID: ${ws_id}."
-    fi
-    if [ -n "$ws_golden" ]; then
-        context_message="${context_message} Golden copy: ${ws_golden}."
-    fi
-    if [ -n "$ws_branch" ]; then
-        context_message="${context_message} Branch: ${ws_branch}."
-    fi
-    context_message="${context_message} When your work is complete, use the grove:finishing-grove-workspace skill."
+    context_message="You are in a Grove workspace (ID: ${ws_id:-unknown}). Golden copy: ${ws_golden:-unknown}. Branch: ${ws_branch:-unknown}. Use grove:finishing-grove-workspace when done."
 
 elif [ "$grove_type" = "golden" ]; then
-    # Check whether grove CLI is installed.
-    if ! command -v grove >/dev/null 2>&1; then
-        context_message="This project uses Grove, but the Grove CLI is not installed. Use the grove:grove-init skill for setup guidance."
-    else
-        context_message="This is a Grove golden copy. Use the grove:using-grove skill to create isolated workspaces before making changes."
-    fi
+    context_message="This project uses Grove. Use grove:using-grove to create isolated workspaces."
 
 else
     # No .grove/ found anywhere — silent exit.
     exit 0
 fi
 
-# Also surface a CLI-not-installed warning when inside a workspace but grove is absent.
-if [ "$grove_type" = "workspace" ] && ! command -v grove >/dev/null 2>&1; then
-    context_message="${context_message} Note: the Grove CLI is not on PATH."
+# Surface a CLI-not-installed warning when grove is absent but .grove/ exists.
+if ! command -v grove >/dev/null 2>&1; then
+    context_message="${context_message} Grove CLI is not installed. Use grove:grove-init for setup guidance."
 fi
 
 context_escaped="$(escape_for_json "$context_message")"
