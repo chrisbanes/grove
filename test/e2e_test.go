@@ -629,6 +629,40 @@ func TestUpdateWithLocalRemote(t *testing.T) {
 	}
 }
 
+func TestCreateIDIncludesBranch(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+	grove(t, binary, repo, "init")
+
+	// Create with explicit branch
+	out := grove(t, binary, repo, "create", "--json", "--branch", "feat/my-feature")
+	var info workspace.Info
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		t.Fatalf("invalid JSON: %s\n%s", err, out)
+	}
+	if !strings.HasPrefix(info.ID, "feat-my-feature-") {
+		t.Errorf("expected ID to start with 'feat-my-feature-', got %q", info.ID)
+	}
+	grove(t, binary, repo, "destroy", "--all")
+
+	// Create without branch — should use golden copy's current branch
+	out = grove(t, binary, repo, "create", "--json")
+	var info2 workspace.Info
+	if err := json.Unmarshal([]byte(out), &info2); err != nil {
+		t.Fatalf("invalid JSON: %s\n%s", err, out)
+	}
+	// The golden copy is on whatever branch git init defaults to (main/master)
+	currentBranch := run(t, repo, "git", "branch", "--show-current")
+	expectedPrefix := strings.ReplaceAll(strings.ToLower(currentBranch), "/", "-") + "-"
+	if !strings.HasPrefix(info2.ID, expectedPrefix) {
+		t.Errorf("expected ID to start with %q, got %q", expectedPrefix, info2.ID)
+	}
+	grove(t, binary, repo, "destroy", "--all")
+}
+
 func TestListJsonEmpty(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("APFS tests only run on macOS")

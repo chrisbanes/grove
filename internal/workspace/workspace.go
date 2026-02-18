@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/chrisbanes/grove/internal/clone"
@@ -26,6 +27,7 @@ type Info struct {
 // CreateOpts holds options for creating a workspace.
 type CreateOpts struct {
 	Branch       string
+	BranchForID  string
 	GoldenCommit string
 }
 
@@ -40,7 +42,7 @@ func Create(goldenRoot string, cfg *config.Config, cloner clone.Cloner, opts Cre
 		return nil, fmt.Errorf("max workspaces (%d) reached — destroy one first", cfg.MaxWorkspaces)
 	}
 
-	id, err := generateID()
+	id, err := GenerateID(opts.BranchForID)
 	if err != nil {
 		return nil, fmt.Errorf("generating workspace ID: %w", err)
 	}
@@ -169,10 +171,45 @@ func readMarker(wsPath string) (*Info, error) {
 	return &info, nil
 }
 
-func generateID() (string, error) {
-	bytes := make([]byte, 4)
+// Slugify converts a branch name to a URL/filesystem-safe slug.
+// Lowercases, replaces non-alphanumeric chars with hyphens, collapses
+// consecutive hyphens, truncates to 20 chars, and trims trailing hyphens.
+func Slugify(branch string) string {
+	if branch == "" {
+		return ""
+	}
+	var b strings.Builder
+	branch = strings.ToLower(branch)
+	prev := false
+	for _, r := range branch {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+			prev = false
+		} else if !prev && b.Len() > 0 {
+			b.WriteByte('-')
+			prev = true
+		}
+	}
+	s := b.String()
+	s = strings.TrimRight(s, "-")
+	if len(s) > 20 {
+		s = s[:20]
+		s = strings.TrimRight(s, "-")
+	}
+	return s
+}
+
+// GenerateID creates a workspace ID. If branch is non-empty, the ID is
+// "{branch-slug}-{4-hex}". Otherwise it is just "{4-hex}".
+func GenerateID(branch string) (string, error) {
+	bytes := make([]byte, 2)
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(bytes), nil
+	suffix := hex.EncodeToString(bytes)
+	slug := Slugify(branch)
+	if slug == "" {
+		return suffix, nil
+	}
+	return slug + "-" + suffix, nil
 }
