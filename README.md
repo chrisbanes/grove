@@ -65,15 +65,15 @@ grove init --warmup-command "./gradlew assemble"
 
 # 2. Create a workspace (instant CoW clone)
 grove create --branch feature/new-login
-# Workspace created: a1b2c3d4
-# Path: /tmp/grove/myproject/a1b2c3d4
+# Workspace created: feature-new-login-a1b2
+# Path: /tmp/grove/myproject/feature-new-login-a1b2
 # Branch: feature/new-login
 
 # 3. Work in the workspace -- builds start warm
-cd /tmp/grove/myproject/a1b2c3d4
+cd /tmp/grove/myproject/feature-new-login-a1b2
 
 # 4. Clean up when done
-grove destroy a1b2c3d4
+grove destroy feature-new-login-a1b2
 ```
 
 ## Commands
@@ -97,13 +97,19 @@ grove init --warmup-command "npm run build" --workspace-dir ~/workspaces/myproje
 
 ### `grove create`
 
-Create a CoW clone workspace from the golden copy.
+Create a CoW clone workspace from the golden copy. Without `--branch`, the
+workspace stays on the golden copy's current branch. With `--branch`, Grove
+creates and checks out a new git branch in the workspace.
 
 ```bash
 grove create --branch feature/auth
-# Workspace created: f7e8d9c0
-# Path: /tmp/grove/myproject/f7e8d9c0
+# Workspace created: feature-auth-f7e8
+# Path: /tmp/grove/myproject/feature-auth-f7e8
 # Branch: feature/auth
+
+grove create
+# Workspace created: main-d9c0
+# Path: /tmp/grove/myproject/main-d9c0
 ```
 
 For machine-readable output:
@@ -113,18 +119,18 @@ grove create --branch agent/fix-bug --json
 ```
 ```json
 {
-  "id": "f7e8d9c0",
+  "id": "agent-fix-bug-f7e8",
   "golden_copy": "/Users/you/dev/myproject",
   "golden_commit": "abc1234",
   "created_at": "2026-02-17T10:30:00Z",
   "branch": "agent/fix-bug",
-  "path": "/tmp/grove/myproject/f7e8d9c0"
+  "path": "/tmp/grove/myproject/agent-fix-bug-f7e8"
 }
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--branch` | Branch to create or checkout in the workspace |
+| `--branch` | Create and checkout a new git branch in the workspace (default: golden copy's current branch) |
 | `--force` | Proceed even if the golden copy has uncommitted changes |
 | `--json` | Output workspace info as JSON |
 
@@ -134,9 +140,9 @@ List active workspaces.
 
 ```bash
 grove list
-# ID        BRANCH              CREATED    PATH
-# f7e8d9c0  feature/auth        5m ago     /tmp/grove/myproject/f7e8d9c0
-# a1b2c3d4  feature/new-login   2h ago     /tmp/grove/myproject/a1b2c3d4
+# ID                     BRANCH              CREATED    PATH
+# feature-auth-f7e8      feature/auth        5m ago     /tmp/grove/myproject/feature-auth-f7e8
+# feature-new-login-a1b2 feature/new-login   2h ago     /tmp/grove/myproject/feature-new-login-a1b2
 ```
 
 | Flag | Description |
@@ -149,16 +155,16 @@ Remove a workspace. Takes a workspace ID or absolute path.
 
 ```bash
 # Destroy a single workspace
-grove destroy f7e8d9c0
-# Destroyed: f7e8d9c0
+grove destroy feature-auth-f7e8
+# Destroyed: feature-auth-f7e8
 
 # Push the branch to origin before destroying
-grove destroy --push f7e8d9c0
+grove destroy --push feature-auth-f7e8
 
 # Destroy all workspaces
 grove destroy --all
-# Destroyed: f7e8d9c0
-# Destroyed: a1b2c3d4
+# Destroyed: feature-auth-f7e8
+# Destroyed: feature-new-login-a1b2
 ```
 
 | Flag | Description |
@@ -266,11 +272,11 @@ grove create --branch agent/fix-login --json
 # Parse JSON for workspace path
 
 # Agent works in the isolated workspace
-cd /tmp/grove/myproject/a1b2c3d4
+cd /tmp/grove/myproject/agent-fix-login-a1b2
 # ... make changes, run tests ...
 
 # Push branch and clean up
-grove destroy --push a1b2c3d4
+grove destroy --push agent-fix-login-a1b2
 ```
 
 Multiple agents can work in parallel, each in its own workspace. Every workspace starts with the same warm build state from the golden copy.
