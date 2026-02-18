@@ -283,6 +283,46 @@ Multiple agents can work in parallel, each in its own workspace. Every workspace
 
 Beyond AI agents, Grove serves any workflow that needs parallel workspaces: CI pipelines, code review, and experimentation.
 
+## Claude Code Skills
+
+Grove includes a Claude Code plugin with skills that integrate Grove into Claude Code workflows. When installed, these skills replace the built-in worktree-based skills with Grove-aware equivalents.
+
+### Install
+
+**Claude Code:**
+
+```bash
+# Add the Grove marketplace
+/plugin marketplace add chrisbanes/grove
+
+# Install the plugin
+/plugin install grove@chrisbanes-grove
+```
+
+**Other agents** (Codex, Cursor, etc.):
+
+```bash
+npx skills add chrisbanes/grove
+```
+
+This copies the skill files to your agent's skills directory (e.g., `~/.claude/skills/` or `~/.agents/skills/`).
+
+### Skills
+
+| Skill | Description |
+|-------|-------------|
+| `grove:using-grove` | Creates a warm workspace before feature work. Replaces `superpowers:using-git-worktrees`. |
+| `grove:finishing-grove-workspace` | Guides completion and cleanup when work is done. Replaces `superpowers:finishing-a-development-branch`. |
+| `grove:grove-init` | Opinionated first-time setup with build system detection. Also available as `/grove-init`. |
+| `grove:grove-doctor` | Diagnoses Grove setup issues (APFS, CLI, hooks, disk space). |
+| `grove:grove-multi-agent` | Orchestrates parallel agents across isolated workspaces. |
+
+### How it works
+
+A **SessionStart hook** runs at the beginning of each conversation. It detects whether you're in a Grove golden copy or workspace and tells Claude which skills are relevant. In a golden copy, Claude will use `grove:using-grove` to create workspaces. In a workspace, it knows to use `grove:finishing-grove-workspace` when done.
+
+The skills integrate with the [superpowers](https://github.com/obra/superpowers) workflow -- `brainstorming`, `subagent-driven-development`, and `executing-plans` all invoke `grove:using-grove` instead of `using-git-worktrees` when Grove is detected.
+
 ## Platform Support
 
 | Platform | Filesystem | Status |
