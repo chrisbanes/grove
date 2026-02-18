@@ -1,0 +1,12 @@
+{
+  "name": "grove",
+  "description": "Grove skills for Claude Code: instant isolated workspaces with warm build caches via copy-on-write clones",
+  "version": "0.1.0",
+  "author": {
+    "name": "Chris Banes"
+  },
+  "homepage": "https://github.com/chrisbanes/grove",
+  "repository": "https://github.com/chrisbanes/grove",
+  "license": "Apache-2.0",
+  "keywords": ["grove", "workspaces", "cow", "isolation", "multi-agent"]
+}
