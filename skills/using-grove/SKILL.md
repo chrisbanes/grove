@@ -10,10 +10,10 @@ I'm using the using-grove skill to create an isolated workspace with warm build 
 ### Step 1: Verify Grove is initialized
 
 ```bash
-test -d "$(git rev-parse --show-toplevel)/.grove"
+test -f "$(git rev-parse --show-toplevel)/.grove/config.json"
 ```
 
-If `.grove/` is not found: Grove is not initialized in this repo. Use the `grove:grove-init` skill to set it up first.
+If `.grove/config.json` is not found: Grove is not initialized in this repo. Use the `grove:grove-init` skill to set it up first.
 
 ### Step 2: Verify grove CLI is installed
 
