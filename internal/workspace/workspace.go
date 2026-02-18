@@ -27,6 +27,7 @@ type Info struct {
 // CreateOpts holds options for creating a workspace.
 type CreateOpts struct {
 	Branch       string
+	BranchForID  string
 	GoldenCommit string
 }
 
@@ -41,7 +42,7 @@ func Create(goldenRoot string, cfg *config.Config, cloner clone.Cloner, opts Cre
 		return nil, fmt.Errorf("max workspaces (%d) reached — destroy one first", cfg.MaxWorkspaces)
 	}
 
-	id, err := GenerateID(opts.Branch)
+	id, err := GenerateID(opts.BranchForID)
 	if err != nil {
 		return nil, fmt.Errorf("generating workspace ID: %w", err)
 	}

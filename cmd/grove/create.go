@@ -67,8 +67,18 @@ caches and gitignored files. Builds in the workspace start warm.`,
 		commit, _ := gitpkg.CurrentCommit(goldenRoot)
 
 		branch, _ := cmd.Flags().GetString("branch")
+
+		// If no branch specified, detect the golden copy's current branch for the ID
+		branchForID := branch
+		if branchForID == "" {
+			if detected, err := gitpkg.CurrentBranch(goldenRoot); err == nil {
+				branchForID = detected
+			}
+		}
+
 		opts := workspace.CreateOpts{
 			Branch:       branch,
+			BranchForID:  branchForID,
 			GoldenCommit: commit,
 		}
 
