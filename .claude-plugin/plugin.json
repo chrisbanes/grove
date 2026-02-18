@@ -1,7 +1,7 @@
 {
   "name": "grove",
   "description": "Grove skills for Claude Code: instant isolated workspaces with warm build caches via copy-on-write clones",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "Chris Banes"
   },
