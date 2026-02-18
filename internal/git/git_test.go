@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/chrisbanes/grove/internal/git"
@@ -113,5 +114,39 @@ func TestCheckout_ExistingBranch(t *testing.T) {
 	branch, _ := git.CurrentBranch(repo)
 	if branch != "feature/test" {
 		t.Errorf("expected feature/test, got %s", branch)
+	}
+}
+
+func TestCheckout_ErrorIncludesGitOutput(t *testing.T) {
+	repo := setupRepo(t)
+	err := git.Checkout(repo, "definitely-missing-branch", false)
+	if err == nil {
+		t.Fatal("expected checkout to fail for missing branch")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "git checkout") {
+		t.Errorf("expected wrapped command name, got: %s", msg)
+	}
+	if !strings.Contains(msg, "pathspec") {
+		t.Errorf("expected git stderr in error, got: %s", msg)
+	}
+}
+
+func TestPush_ErrorIncludesGitOutput(t *testing.T) {
+	repo := setupRepo(t)
+	branch, err := git.CurrentBranch(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = git.Push(repo, branch)
+	if err == nil {
+		t.Fatal("expected push to fail without an origin remote")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "git push") {
+		t.Errorf("expected wrapped command name, got: %s", msg)
+	}
+	if !strings.Contains(msg, "fatal") {
+		t.Errorf("expected git stderr in error, got: %s", msg)
 	}
 }

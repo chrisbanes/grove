@@ -48,7 +48,10 @@ var destroyCmd = &cobra.Command{
 			}
 			for _, ws := range list {
 				if push && ws.Branch != "" {
-					gitpkg.Push(ws.Path, ws.Branch)
+					if err := gitpkg.Push(ws.Path, ws.Branch); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to push %s (%s): %v\n", ws.ID, ws.Branch, err)
+						continue
+					}
 				}
 				if err := workspace.Destroy(cfg, ws.ID); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to destroy %s: %v\n", ws.ID, err)
@@ -67,7 +70,9 @@ var destroyCmd = &cobra.Command{
 		if push {
 			info, err := workspace.Get(cfg, idOrPath)
 			if err == nil && info.Branch != "" {
-				gitpkg.Push(info.Path, info.Branch)
+				if err := gitpkg.Push(info.Path, info.Branch); err != nil {
+					return fmt.Errorf("push failed for %s (%s): %w", info.ID, info.Branch, err)
+				}
 			}
 		}
 
