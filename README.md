@@ -289,9 +289,19 @@ Grove includes a Claude Code plugin with skills that integrate Grove into Claude
 
 ### Install
 
+**Claude Code:**
+
 ```bash
 claude plugin add chrisbanes/grove
 ```
+
+**Other agents** (Codex, Cursor, etc.):
+
+```bash
+npx skills add chrisbanes/grove
+```
+
+This copies the skill files to your agent's skills directory (e.g., `~/.claude/skills/` or `~/.agents/skills/`).
 
 ### Skills
 
