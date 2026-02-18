@@ -60,37 +60,43 @@ The macOS binary is unsigned. Gatekeeper warns users or blocks execution on firs
 
 ### Approach
 
-Use `codesign` and `notarytool` (Apple's current tooling) integrated into the GoReleaser release workflow.
+Use GoReleaser's built-in `notarize.macos` support, which uses [quill](https://github.com/anchore/quill) to handle both signing and notarization declaratively. This keeps everything in `.goreleaser.yml` — no manual `codesign` or `xcrun notarytool` steps in the workflow.
 
-### Release workflow changes
+### GoReleaser config
 
-**Certificate setup** (new step in `.github/workflows/release.yml`):
-1. Decode a base64-encoded `.p12` certificate from a GitHub secret.
-2. Import it into a temporary keychain created for the CI run.
-3. Set the keychain as the default and unlock it.
+The `notarize.macos` block signs each binary with the `.p12` certificate and submits to Apple for notarization via an App Store Connect API key:
 
-**Signing** (GoReleaser `signs` config or post-build step):
-1. `codesign --force --options runtime --sign "${APPLE_DEVELOPER_ID}" grove` on each built binary.
+```yaml
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - grove
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+        wait: true
+        timeout: 20m
+```
 
-**Notarization** (post-archive step):
-1. Zip the signed binary.
-2. Submit to Apple via `xcrun notarytool submit --apple-id --password --team-id --wait`.
-3. Staple the notarization ticket if distributing a `.dmg` or `.app` bundle (for raw binaries, notarization alone suffices — Gatekeeper checks the ticket online).
+The `enabled` guard (`isEnvSet "MACOS_SIGN_P12"`) allows local/unsigned builds when the secrets are not set.
 
 ### Required GitHub Actions secrets
 
 | Secret | Purpose |
 |--------|---------|
-| `APPLE_CERTIFICATE_P12` | Base64-encoded Developer ID Application certificate |
-| `APPLE_CERTIFICATE_PASSWORD` | Password for the .p12 file |
-| `APPLE_DEVELOPER_ID` | Signing identity (e.g., `Developer ID Application: Name (TEAMID)`) |
-| `APPLE_ID` | Apple ID email for notarytool |
-| `APPLE_ID_PASSWORD` | App-specific password for notarytool |
-| `APPLE_TEAM_ID` | Apple Developer team ID |
+| `MACOS_SIGN_P12` | Base64-encoded Developer ID Application `.p12` certificate |
+| `MACOS_SIGN_PASSWORD` | Password for the `.p12` file |
+| `MACOS_NOTARY_ISSUER_ID` | App Store Connect API issuer ID |
+| `MACOS_NOTARY_KEY_ID` | App Store Connect API key ID |
+| `MACOS_NOTARY_KEY` | App Store Connect API private key (`.p8` contents) |
 
 ### Notes
 
-- GoReleaser's `signs` block can handle codesigning each binary after build.
-- Notarization applies to the final archive, not individual binaries — this runs as a post-GoReleaser step.
-- The `--options runtime` flag enables the hardened runtime, which Apple requires for notarization.
+- GoReleaser's quill-based notarization works cross-platform (no need for native `codesign`/`xcrun`).
+- No manual keychain setup or cleanup steps in the workflow.
 - Raw command-line binaries do not need stapling; Gatekeeper verifies notarization online when the binary is first run.

@@ -1,7 +1,8 @@
 version: 2
 
 builds:
-  - main: ./cmd/grove
+  - id: grove
+    main: ./cmd/grove
     binary: grove
     env:
       - CGO_ENABLED=0
@@ -13,16 +14,20 @@ builds:
     ldflags:
       - -s -w -X main.version={{.Version}}
 
-signs:
-  - cmd: codesign
-    args:
-      - "--force"
-      - "--options"
-      - "runtime"
-      - "--sign"
-      - "{{ .Env.APPLE_DEVELOPER_ID }}"
-      - "${artifact}"
-    artifacts: binary
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - grove
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+        wait: true
+        timeout: 20m
 
 archives:
   - format: tar.gz
