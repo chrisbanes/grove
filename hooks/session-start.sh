@@ -54,13 +54,13 @@ if [ "$grove_type" = "workspace" ]; then
     ws_branch=""
 
     if command -v jq >/dev/null 2>&1; then
-        ws_id="$(jq -r '.id // ""' "$workspace_json" 2>/dev/null || true)"
-        ws_golden="$(jq -r '.golden_copy // ""' "$workspace_json" 2>/dev/null || true)"
-        ws_branch="$(jq -r '.branch // ""' "$workspace_json" 2>/dev/null || true)"
+        ws_id="$(jq -r '.id? // ""' "$workspace_json" 2>/dev/null || true)"
+        ws_golden="$(jq -r '.golden_copy? // ""' "$workspace_json" 2>/dev/null || true)"
+        ws_branch="$(jq -r '.branch? // ""' "$workspace_json" 2>/dev/null || true)"
     elif command -v python3 >/dev/null 2>&1; then
-        ws_id="$(python3 -c "import json,sys; d=json.load(open('$workspace_json')); print(d.get('id',''))" 2>/dev/null || true)"
-        ws_golden="$(python3 -c "import json,sys; d=json.load(open('$workspace_json')); print(d.get('golden_copy',''))" 2>/dev/null || true)"
-        ws_branch="$(python3 -c "import json,sys; d=json.load(open('$workspace_json')); print(d.get('branch',''))" 2>/dev/null || true)"
+        ws_id="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('id',''))" "$workspace_json" 2>/dev/null || true)"
+        ws_golden="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('golden_copy',''))" "$workspace_json" 2>/dev/null || true)"
+        ws_branch="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('branch',''))" "$workspace_json" 2>/dev/null || true)"
     fi
 
     context_message="You are in a Grove workspace (ID: ${ws_id:-unknown}). Golden copy: ${ws_golden:-unknown}. Branch: ${ws_branch:-unknown}. Use grove:finishing-grove-workspace when done."
