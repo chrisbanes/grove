@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/chrisbanes/grove/internal/clone"
@@ -127,5 +128,54 @@ func TestIsWorkspace(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, ".grove", "workspace.json"), []byte("{}"), 0644)
 	if !workspace.IsWorkspace(dir) {
 		t.Error("expected true for workspace with marker")
+	}
+}
+
+func TestSlugify(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"main", "main"},
+		{"feat/login-page", "feat-login-page"},
+		{"agent/fix-auth-module-refactor-something", "agent-fix-auth-modul"},
+		{"UPPER/Case", "upper-case"},
+		{"feat//double--slash", "feat-double-slash"},
+		{"trailing-slash/", "trailing-slash"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := workspace.Slugify(tt.input)
+			if got != tt.want {
+				t.Errorf("Slugify(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGenerateID_WithBranch(t *testing.T) {
+	id, err := workspace.GenerateID("feat/login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Should be "feat-login-XXXX" where XXXX is 4 hex chars
+	if !strings.HasPrefix(id, "feat-login-") {
+		t.Errorf("expected prefix 'feat-login-', got %q", id)
+	}
+	suffix := id[len("feat-login-"):]
+	if len(suffix) != 4 {
+		t.Errorf("expected 4-char hex suffix, got %q", suffix)
+	}
+}
+
+func TestGenerateID_Empty(t *testing.T) {
+	id, err := workspace.GenerateID("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No branch: just 4 hex chars
+	if len(id) != 4 {
+		t.Errorf("expected 4-char hex ID, got %q (len %d)", id, len(id))
 	}
 }
