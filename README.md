@@ -292,7 +292,11 @@ Grove includes a Claude Code plugin with skills that integrate Grove into Claude
 **Claude Code:**
 
 ```bash
-claude plugin add chrisbanes/grove
+# Add the Grove marketplace
+/plugin marketplace add chrisbanes/grove
+
+# Install the plugin
+/plugin install grove@chrisbanes-grove
 ```
 
 **Other agents** (Codex, Cursor, etc.):
