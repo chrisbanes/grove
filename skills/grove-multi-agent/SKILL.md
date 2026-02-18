@@ -1,6 +1,6 @@
 ---
 name: grove-multi-agent
-description: Use when multiple independent tasks need to be executed in parallel, each requiring isolated build state — such as implementing several unrelated features simultaneously, running parallel refactors across non-overlapping modules, or when a plan has been decomposed into independent workstreams that can proceed without sharing files
+description: Use when multiple independent tasks need to be executed in parallel, each in an isolated workspace with warm build state
 ---
 
 I'm using the grove-multi-agent skill to orchestrate parallel agents across isolated Grove workspaces.

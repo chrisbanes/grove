@@ -136,4 +136,3 @@ For every FAIL, include a Fix line with a specific command or actionable suggest
 ## Integration
 
 - **Standalone** — invoked manually when things go wrong; not called by other skills automatically
-- **Invoked via:** `/grove-doctor` slash command
