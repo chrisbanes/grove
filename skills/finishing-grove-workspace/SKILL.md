@@ -51,6 +51,8 @@ Present exactly these four options:
 
 **Option 1: Push + PR**
 
+Derive the PR title from the branch name and the body from a summary of commits since the golden copy.
+
 ```bash
 git push -u origin <branch>
 gh pr create --title "<title>" --body "<body>"
