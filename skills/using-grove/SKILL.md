@@ -1,6 +1,6 @@
 ---
 name: using-grove
-description: Use when starting feature work that needs isolation from the current workspace or before executing implementation plans - creates CoW-cloned workspaces with warm build caches via grove CLI, preferred over using-git-worktrees in Grove projects
+description: Use when starting feature work that needs isolation from the current workspace, or before executing implementation plans in a Grove-enabled repository
 ---
 
 I'm using the using-grove skill to create an isolated workspace with warm build state.
