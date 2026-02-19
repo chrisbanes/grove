@@ -128,11 +128,26 @@ grove create --branch agent/fix-bug --json
 }
 ```
 
+For long-running clones in large repos, opt in to progress output:
+
+```bash
+grove create --progress
+# [5%] clone
+# [42%] clone
+# [95%] post-clone hook
+# [100%] done
+# Workspace created: main-d9c0
+```
+
+When combined with `--json`, progress is written to `stderr` and final JSON is
+written to `stdout`.
+
 | Flag | Description |
 |------|-------------|
 | `--branch` | Create and checkout a new git branch in the workspace (default: golden copy's current branch) |
 | `--force` | Proceed even if the golden copy has uncommitted changes |
 | `--json` | Output workspace info as JSON |
+| `--progress` | Show progress output for long-running create operations (written to `stderr`) |
 
 ### `grove list`
 

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -79,6 +80,22 @@ func grove(t *testing.T, binary, dir string, args ...string) string {
 		t.Fatalf("grove %v failed: %s\n%s", args, err, out)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func groveOutErr(t *testing.T, binary, dir string, args ...string) (string, string) {
+	t.Helper()
+	cmd := exec.Command(binary, args...)
+	cmd.Dir = dir
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("grove %v failed: %s\nstdout:\n%s\nstderr:\n%s", args, err, stdout.String(), stderr.String())
+	}
+	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String())
 }
 
 func groveExpectErr(t *testing.T, binary, dir string, args ...string) string {
@@ -762,4 +779,50 @@ func TestListJsonEmpty(t *testing.T) {
 	if out == "No active workspaces." || !json.Valid([]byte(out)) {
 		t.Errorf("list --json with no workspaces must be valid JSON, got: %s", out)
 	}
+}
+
+func TestCreateProgressJsonContract(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+	grove(t, binary, repo, "init")
+
+	stdout, stderr := groveOutErr(t, binary, repo, "create", "--progress", "--json")
+
+	var info workspace.Info
+	if err := json.Unmarshal([]byte(stdout), &info); err != nil {
+		t.Fatalf("invalid JSON output with --progress --json: %s\n%s", err, stdout)
+	}
+	if info.ID == "" {
+		t.Fatalf("missing workspace ID in json output: %s", stdout)
+	}
+	if stderr == "" {
+		t.Fatal("expected progress output on stderr, got empty stderr")
+	}
+	if !strings.Contains(stderr, "[") || !strings.Contains(stderr, "%") {
+		t.Fatalf("expected stderr to contain progress output, got: %s", stderr)
+	}
+	grove(t, binary, repo, "destroy", "--all")
+}
+
+func TestCreateJsonNoProgressNoise(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+	grove(t, binary, repo, "init")
+
+	stdout, stderr := groveOutErr(t, binary, repo, "create", "--json")
+
+	if stderr != "" {
+		t.Fatalf("expected empty stderr without --progress, got: %s", stderr)
+	}
+	var info workspace.Info
+	if err := json.Unmarshal([]byte(stdout), &info); err != nil {
+		t.Fatalf("invalid JSON output without --progress: %s\n%s", err, stdout)
+	}
+	grove(t, binary, repo, "destroy", "--all")
 }

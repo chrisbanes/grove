@@ -29,6 +29,7 @@ type CreateOpts struct {
 	Branch       string
 	BranchForID  string
 	GoldenCommit string
+	OnClone      clone.ProgressFunc
 }
 
 // Create makes a new workspace by CoW-cloning the golden copy.
@@ -55,7 +56,7 @@ func Create(goldenRoot string, cfg *config.Config, cloner clone.Cloner, opts Cre
 	}
 
 	// CoW clone
-	if err := cloner.Clone(goldenRoot, wsPath); err != nil {
+	if err := cloneWorkspace(cloner, goldenRoot, wsPath, opts.OnClone); err != nil {
 		os.RemoveAll(wsPath) // clean up partial clone
 		return nil, fmt.Errorf("clone failed: %w", err)
 	}
@@ -76,6 +77,15 @@ func Create(goldenRoot string, cfg *config.Config, cloner clone.Cloner, opts Cre
 	}
 
 	return info, nil
+}
+
+func cloneWorkspace(cloner clone.Cloner, src, dst string, onClone clone.ProgressFunc) error {
+	if onClone != nil {
+		if c, ok := cloner.(clone.ProgressCloner); ok {
+			return c.CloneWithProgress(src, dst, onClone)
+		}
+	}
+	return cloner.Clone(src, dst)
 }
 
 // List returns all workspaces in the configured workspace directory.
