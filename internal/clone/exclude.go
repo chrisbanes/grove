@@ -124,6 +124,64 @@ func SelectiveClone(cloner Cloner, src, dst string, excludes []string) error {
 	return executeClonePlan(cloner, src, dst, ".", excludes, plan)
 }
 
+// SelectiveCloneWithProgress clones src to dst with excludes and progress reporting.
+// If excludes is empty, falls back to the cloner's CloneWithProgress if available.
+func SelectiveCloneWithProgress(cloner Cloner, src, dst string, excludes []string, onProgress ProgressFunc) error {
+	if len(excludes) == 0 {
+		if pc, ok := cloner.(ProgressCloner); ok && onProgress != nil {
+			return pc.CloneWithProgress(src, dst, onProgress)
+		}
+		return cloner.Clone(src, dst)
+	}
+
+	plan, err := buildClonePlan(src, excludes)
+	if err != nil {
+		return fmt.Errorf("planning clone: %w", err)
+	}
+
+	if onProgress != nil {
+		onProgress(ProgressEvent{Total: plan.totalEntries, Phase: "scan"})
+	}
+
+	copied := 0
+	countingCloner := &progressTrackingCloner{
+		inner:      cloner,
+		copied:     &copied,
+		total:      plan.totalEntries,
+		onProgress: onProgress,
+	}
+
+	return executeClonePlan(countingCloner, src, dst, ".", excludes, plan)
+}
+
+// progressTrackingCloner wraps a Cloner and accumulates progress across multiple clone calls.
+type progressTrackingCloner struct {
+	inner      Cloner
+	copied     *int
+	total      int
+	onProgress ProgressFunc
+}
+
+func (p *progressTrackingCloner) Clone(src, dst string) error {
+	if pc, ok := p.inner.(ProgressCloner); ok && p.onProgress != nil {
+		prevCopied := 0
+		return pc.CloneWithProgress(src, dst, func(e ProgressEvent) {
+			if e.Phase != "clone" {
+				return
+			}
+			delta := e.Copied - prevCopied
+			prevCopied = e.Copied
+			*p.copied += delta
+			p.onProgress(ProgressEvent{
+				Copied: *p.copied,
+				Total:  p.total,
+				Phase:  "clone",
+			})
+		})
+	}
+	return p.inner.Clone(src, dst)
+}
+
 // executeClonePlan recursively clones children of srcDir into dstDir,
 // skipping excluded entries and recursing into directories that contain excludes.
 func executeClonePlan(cloner Cloner, srcRoot, dstRoot, rel string, excludes []string, plan *clonePlan) error {

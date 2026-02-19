@@ -257,6 +257,69 @@ func TestSelectiveClone_PathPatternExclude(t *testing.T) {
 	}
 }
 
+func TestSelectiveCloneWithProgress_ReportsCorrectTotal(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	src := t.TempDir()
+	os.MkdirAll(filepath.Join(src, "keep"), 0755)
+	os.MkdirAll(filepath.Join(src, "__pycache__"), 0755)
+	os.WriteFile(filepath.Join(src, "keep", "file.txt"), []byte("keep"), 0644)
+	os.WriteFile(filepath.Join(src, "__pycache__", "module.pyc"), []byte("pyc"), 0644)
+	os.WriteFile(filepath.Join(src, "root.txt"), []byte("root"), 0644)
+
+	dst := filepath.Join(t.TempDir(), "clone")
+	c, _ := NewCloner(src)
+
+	var scanTotal int
+	var lastCopied int
+	onProgress := func(e ProgressEvent) {
+		if e.Phase == "scan" {
+			scanTotal = e.Total
+		}
+		if e.Phase == "clone" {
+			lastCopied = e.Copied
+		}
+	}
+
+	if err := SelectiveCloneWithProgress(c, src, dst, []string{"__pycache__"}, onProgress); err != nil {
+		t.Fatal(err)
+	}
+
+	// Non-excluded: root dir, keep dir, keep/file.txt, root.txt = 4
+	if scanTotal != 4 {
+		t.Errorf("expected scan total 4, got %d", scanTotal)
+	}
+	if lastCopied < 1 {
+		t.Error("expected at least one progress event during clone")
+	}
+}
+
+func TestSelectiveCloneWithProgress_NoExcludesFallback(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	src := t.TempDir()
+	os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0644)
+
+	dst := filepath.Join(t.TempDir(), "clone")
+	c, _ := NewCloner(src)
+
+	var gotScan bool
+	onProgress := func(e ProgressEvent) {
+		if e.Phase == "scan" {
+			gotScan = true
+		}
+	}
+
+	if err := SelectiveCloneWithProgress(c, src, dst, nil, onProgress); err != nil {
+		t.Fatal(err)
+	}
+	if !gotScan {
+		t.Error("expected scan phase event even with no excludes")
+	}
+}
+
 func TestSelectiveClone_GroveDirNeverExcluded(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("APFS tests only run on macOS")
