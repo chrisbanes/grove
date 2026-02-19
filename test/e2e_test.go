@@ -2,10 +2,12 @@ package test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -88,6 +90,67 @@ func groveExpectErr(t *testing.T, binary, dir string, args ...string) string {
 		t.Fatalf("grove %v succeeded but expected failure.\nOutput: %s", args, out)
 	}
 	return string(out)
+}
+
+func TestCreate_CloneMetadataSignal(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+	grove(t, binary, repo, "init")
+
+	out := grove(t, binary, repo, "create", "--json")
+	var info workspace.Info
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		t.Fatalf("invalid JSON output: %s\n%s", err, out)
+	}
+
+	srcPath := filepath.Join(repo, "main.go")
+	dstPath := filepath.Join(info.Path, "main.go")
+
+	srcInode, srcSize, _, err := readE2EStat(srcPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dstInode, dstSize, _, err := readE2EStat(dstPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if srcSize != dstSize {
+		t.Fatalf("size mismatch between source and workspace clone: src=%d dst=%d", srcSize, dstSize)
+	}
+	if srcInode == dstInode {
+		t.Fatalf("inode should differ between source and workspace clone: inode=%d", srcInode)
+	}
+
+	grove(t, binary, repo, "destroy", "--all")
+}
+
+func readE2EStat(path string) (inode int64, size int64, blocks int64, err error) {
+	out, err := exec.Command("/usr/bin/stat", "-f", "%i %z %b", path).Output()
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("stat failed for %s: %w", path, err)
+	}
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	if len(fields) != 3 {
+		return 0, 0, 0, fmt.Errorf("unexpected stat output for %s: %q", path, strings.TrimSpace(string(out)))
+	}
+	inode, err = strconv.ParseInt(fields[0], 10, 64)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("parse inode for %s: %w", path, err)
+	}
+	size, err = strconv.ParseInt(fields[1], 10, 64)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("parse size for %s: %w", path, err)
+	}
+	blocks, err = strconv.ParseInt(fields[2], 10, 64)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("parse blocks for %s: %w", path, err)
+	}
+	return inode, size, blocks, nil
 }
 
 func TestFullLifecycle(t *testing.T) {
