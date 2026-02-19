@@ -6,17 +6,22 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 // APFSCloner performs CoW clones using macOS APFS cp -c.
 type APFSCloner struct{}
 
 func (c *APFSCloner) Clone(src, dst string) error {
+	if err := ensureSameFilesystemForClone(src, dst); err != nil {
+		return err
+	}
 	cmd := exec.Command("cp", "-c", "-R", src, dst)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -26,6 +31,9 @@ func (c *APFSCloner) Clone(src, dst string) error {
 }
 
 func (c *APFSCloner) CloneWithProgress(src, dst string, onProgress ProgressFunc) error {
+	if err := ensureSameFilesystemForClone(src, dst); err != nil {
+		return err
+	}
 	total, err := countEntries(src)
 	if err != nil {
 		total = 0
@@ -158,4 +166,50 @@ func countEntries(root string) (int, error) {
 		return nil
 	})
 	return count, err
+}
+
+type statFunc func(path string) (os.FileInfo, error)
+
+func ensureSameFilesystemForClone(src, dst string) error {
+	return ensureSameFilesystemForCloneWithStat(src, dst, os.Stat)
+}
+
+func ensureSameFilesystemForCloneWithStat(src, dst string, stat statFunc) error {
+	srcDev, err := deviceIDForPath(src, stat)
+	if err != nil {
+		return fmt.Errorf("clone preflight failed: %w", err)
+	}
+
+	dstPath := dst
+	if _, err := stat(dstPath); err != nil {
+		if os.IsNotExist(err) {
+			dstPath = filepath.Dir(dst)
+		} else {
+			return fmt.Errorf("clone preflight failed: stat %s: %w", dst, err)
+		}
+	}
+
+	dstDev, err := deviceIDForPath(dstPath, stat)
+	if err != nil {
+		return fmt.Errorf("clone preflight failed: %w", err)
+	}
+	if srcDev != dstDev {
+		return fmt.Errorf(
+			"clone preflight failed: source and destination must be on the same filesystem for APFS copy-on-write clones (source: %s, destination: %s).\nSet .grove/config.json workspace_dir to a path on the same volume as the golden copy",
+			src, dst,
+		)
+	}
+	return nil
+}
+
+func deviceIDForPath(path string, stat statFunc) (uint64, error) {
+	info, err := stat(path)
+	if err != nil {
+		return 0, fmt.Errorf("stat %s: %w", path, err)
+	}
+	sys, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || sys == nil {
+		return 0, fmt.Errorf("stat %s: missing device metadata", path)
+	}
+	return uint64(sys.Dev), nil
 }
