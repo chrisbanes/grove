@@ -826,3 +826,60 @@ func TestCreateJsonNoProgressNoise(t *testing.T) {
 	}
 	grove(t, binary, repo, "destroy", "--all")
 }
+
+func TestCreateWithExcludes(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+
+	// Init first (clean repo)
+	grove(t, binary, repo, "init")
+
+	// Add files that should be excluded (after init, so they are untracked artifacts)
+	os.MkdirAll(filepath.Join(repo, "__pycache__"), 0755)
+	os.WriteFile(filepath.Join(repo, "__pycache__", "module.pyc"), []byte("pyc"), 0644)
+	os.WriteFile(filepath.Join(repo, "yarn.lock"), []byte("lockfile"), 0644)
+
+	// Manually update config to add excludes
+	cfgPath := filepath.Join(repo, ".grove", "config.json")
+	cfgData, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	json.Unmarshal(cfgData, &cfg)
+	cfg["exclude"] = []string{"__pycache__", "*.lock"}
+	updated, _ := json.MarshalIndent(cfg, "", "  ")
+	os.WriteFile(cfgPath, updated, 0644)
+
+	// Create workspace (--force because excluded files are untracked)
+	out := grove(t, binary, repo, "create", "--json", "--force")
+	var info workspace.Info
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		t.Fatalf("invalid JSON: %s\n%s", err, out)
+	}
+	defer grove(t, binary, repo, "destroy", info.ID)
+
+	// Verify included files
+	if _, err := os.Stat(filepath.Join(info.Path, "main.go")); err != nil {
+		t.Error("main.go should exist in workspace")
+	}
+	if _, err := os.Stat(filepath.Join(info.Path, "build", "output.bin")); err != nil {
+		t.Error("build/output.bin should exist in workspace")
+	}
+
+	// Verify excluded files
+	if _, err := os.Stat(filepath.Join(info.Path, "__pycache__")); !os.IsNotExist(err) {
+		t.Error("__pycache__ should not exist in workspace")
+	}
+	if _, err := os.Stat(filepath.Join(info.Path, "yarn.lock")); !os.IsNotExist(err) {
+		t.Error("yarn.lock should not exist in workspace")
+	}
+
+	// Verify .grove still exists (never excluded)
+	if _, err := os.Stat(filepath.Join(info.Path, ".grove", "config.json")); err != nil {
+		t.Error(".grove/config.json should exist in workspace")
+	}
+}
