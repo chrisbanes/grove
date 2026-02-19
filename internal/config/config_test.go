@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"reflect"
 	"os"
 	"path/filepath"
 	"testing"
@@ -62,6 +63,51 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	if cfg.MaxWorkspaces != 10 {
 		t.Errorf("expected default max_workspaces 10, got %d", cfg.MaxWorkspaces)
+	}
+}
+
+func TestSaveAndLoad_ExcludeGlobs(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := &config.Config{
+		WorkspaceDir:  "/tmp/grove/test",
+		MaxWorkspaces: 5,
+		ExcludeGlobs:  []string{"node_modules/**", ".gradle/caches/**"},
+	}
+	if err := config.Save(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(loaded.ExcludeGlobs, cfg.ExcludeGlobs) {
+		t.Fatalf("expected exclude globs %v, got %v", cfg.ExcludeGlobs, loaded.ExcludeGlobs)
+	}
+}
+
+func TestLoad_Defaults_ExcludeGlobsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	groveDir := filepath.Join(dir, ".grove")
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(
+		filepath.Join(groveDir, "config.json"),
+		[]byte(`{"workspace_dir": "/tmp/test","max_workspaces":2}`),
+		0644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.ExcludeGlobs) != 0 {
+		t.Fatalf("expected empty exclude globs, got %v", cfg.ExcludeGlobs)
 	}
 }
 

@@ -19,6 +19,7 @@ type Config struct {
 	WarmupCommand string `json:"warmup_command,omitempty"`
 	WorkspaceDir  string `json:"workspace_dir"`
 	MaxWorkspaces int    `json:"max_workspaces"`
+	ExcludeGlobs  []string `json:"exclude_globs,omitempty"`
 }
 
 func DefaultConfig(projectName string) *Config {
@@ -40,6 +41,9 @@ func Load(repoRoot string) (*Config, error) {
 	}
 	if cfg.MaxWorkspaces == 0 {
 		cfg.MaxWorkspaces = 10
+	}
+	if cfg.ExcludeGlobs == nil {
+		cfg.ExcludeGlobs = []string{}
 	}
 	return &cfg, nil
 }
