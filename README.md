@@ -230,7 +230,8 @@ Grove stores its configuration in `.grove/config.json` inside the golden copy:
 {
   "warmup_command": "./gradlew assemble",
   "workspace_dir": "/tmp/grove/{project}",
-  "max_workspaces": 10
+  "max_workspaces": 10,
+  "exclude": ["*.lock", "__pycache__", ".gradle/configuration-cache"]
 }
 ```
 
@@ -239,6 +240,7 @@ Grove stores its configuration in `.grove/config.json` inside the golden copy:
 | `warmup_command` | Shell command to warm build caches. Runs during `grove init` and `grove update`. | *(none)* |
 | `workspace_dir` | Where workspaces are created. `{project}` expands to the golden copy's directory name. | `/tmp/grove/{project}` |
 | `max_workspaces` | Maximum concurrent workspaces. Prevents disk exhaustion. | `10` |
+| `exclude` | Glob patterns for files/directories to skip when cloning. See [Exclude Patterns](#exclude-patterns). | `[]` |
 
 **Warmup command examples by ecosystem:**
 
@@ -248,6 +250,29 @@ Grove stores its configuration in `.grove/config.json` inside the golden copy:
 | npm | `npm run build` |
 | Cargo | `cargo build` |
 | Go | `go build ./...` |
+
+## Exclude Patterns
+
+Exclude patterns prevent specific files or directories from being copied during workspace creation. Unlike [post-clone hooks](#post-clone), excluded paths are never touched at all -- they aren't copied and then deleted, they're skipped entirely. This matters for performance (large caches) and correctness (lock files, PID files, sockets).
+
+```json
+{
+  "exclude": [
+    "*.lock",
+    "__pycache__",
+    ".gradle/configuration-cache"
+  ]
+}
+```
+
+Patterns use Go's `filepath.Match` syntax:
+
+- **Simple patterns** (no `/`) match against the **basename** at any depth. `*.lock` matches `yarn.lock`, `packages/foo/yarn.lock`, etc. `__pycache__` matches any directory with that name.
+- **Path patterns** (contain `/`) match against the **full relative path** from the repo root. `.gradle/configuration-cache` matches only that exact path.
+
+The `.grove` directory is never excluded, regardless of patterns.
+
+**Exclude patterns vs. post-clone hooks:** Use exclude patterns for files that should never be cloned (large caches, lock files). Use hooks for cleanup that requires logic (e.g., patching config files, running commands).
 
 ## Hooks
 

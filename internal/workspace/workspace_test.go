@@ -179,3 +179,41 @@ func TestGenerateID_Empty(t *testing.T) {
 		t.Errorf("expected 4-char hex ID, got %q (len %d)", id, len(id))
 	}
 }
+
+func TestCreate_WithExcludes(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove", "hooks"), 0755)
+	os.WriteFile(filepath.Join(dir, "src.txt"), []byte("source"), 0644)
+	os.MkdirAll(filepath.Join(dir, "__pycache__"), 0755)
+	os.WriteFile(filepath.Join(dir, "__pycache__", "module.pyc"), []byte("pyc"), 0644)
+
+	wsDir := filepath.Join(t.TempDir(), "workspaces")
+	cfg := &config.Config{
+		WorkspaceDir:  wsDir,
+		MaxWorkspaces: 3,
+		Exclude:       []string{"__pycache__"},
+	}
+	config.Save(dir, cfg)
+	c, _ := clone.NewCloner(dir)
+
+	info, err := workspace.Create(dir, cfg, c, workspace.CreateOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// src.txt should be cloned
+	if _, err := os.Stat(filepath.Join(info.Path, "src.txt")); err != nil {
+		t.Error("src.txt should exist in workspace")
+	}
+	// __pycache__ should NOT be cloned
+	if _, err := os.Stat(filepath.Join(info.Path, "__pycache__")); !os.IsNotExist(err) {
+		t.Error("__pycache__ should not exist in workspace")
+	}
+	// Workspace marker should still exist
+	if !workspace.IsWorkspace(info.Path) {
+		t.Error("workspace marker should exist")
+	}
+}
