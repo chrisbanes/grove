@@ -3,6 +3,7 @@ package clone
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -143,5 +144,135 @@ func TestBuildClonePlan_PathPatternExclude(t *testing.T) {
 	// root, .gradle, .gradle/caches, .gradle/caches/deps.jar = 4
 	if plan.totalEntries != 4 {
 		t.Errorf("expected 4 entries, got %d", plan.totalEntries)
+	}
+}
+
+func TestSelectiveClone_NoExcludes(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	src := t.TempDir()
+	os.MkdirAll(filepath.Join(src, "sub"), 0755)
+	os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0644)
+	os.WriteFile(filepath.Join(src, "sub", "b.txt"), []byte("b"), 0644)
+
+	dst := filepath.Join(t.TempDir(), "clone")
+	c, _ := NewCloner(src)
+
+	if err := SelectiveClone(c, src, dst, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dst, "a.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "a" {
+		t.Errorf("expected 'a', got %q", string(data))
+	}
+	data, err = os.ReadFile(filepath.Join(dst, "sub", "b.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "b" {
+		t.Errorf("expected 'b', got %q", string(data))
+	}
+}
+
+func TestSelectiveClone_ExcludesTopLevel(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	src := t.TempDir()
+	os.MkdirAll(filepath.Join(src, "keep"), 0755)
+	os.MkdirAll(filepath.Join(src, "__pycache__"), 0755)
+	os.WriteFile(filepath.Join(src, "keep", "file.txt"), []byte("keep"), 0644)
+	os.WriteFile(filepath.Join(src, "__pycache__", "module.pyc"), []byte("pyc"), 0644)
+
+	dst := filepath.Join(t.TempDir(), "clone")
+	c, _ := NewCloner(src)
+
+	if err := SelectiveClone(c, src, dst, []string{"__pycache__"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dst, "keep", "file.txt")); err != nil {
+		t.Error("keep/file.txt should exist")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "__pycache__")); !os.IsNotExist(err) {
+		t.Error("__pycache__ should not exist in clone")
+	}
+}
+
+func TestSelectiveClone_ExcludesNestedFile(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	src := t.TempDir()
+	os.MkdirAll(filepath.Join(src, "pkg", "foo"), 0755)
+	os.WriteFile(filepath.Join(src, "pkg", "foo", "main.go"), []byte("go"), 0644)
+	os.WriteFile(filepath.Join(src, "pkg", "foo", "yarn.lock"), []byte("lock"), 0644)
+	os.WriteFile(filepath.Join(src, "root.txt"), []byte("root"), 0644)
+
+	dst := filepath.Join(t.TempDir(), "clone")
+	c, _ := NewCloner(src)
+
+	if err := SelectiveClone(c, src, dst, []string{"*.lock"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dst, "pkg", "foo", "main.go")); err != nil {
+		t.Error("pkg/foo/main.go should exist")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "root.txt")); err != nil {
+		t.Error("root.txt should exist")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "pkg", "foo", "yarn.lock")); !os.IsNotExist(err) {
+		t.Error("pkg/foo/yarn.lock should not exist in clone")
+	}
+}
+
+func TestSelectiveClone_PathPatternExclude(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	src := t.TempDir()
+	os.MkdirAll(filepath.Join(src, ".gradle", "configuration-cache"), 0755)
+	os.MkdirAll(filepath.Join(src, ".gradle", "caches"), 0755)
+	os.WriteFile(filepath.Join(src, ".gradle", "configuration-cache", "data.bin"), []byte("data"), 0644)
+	os.WriteFile(filepath.Join(src, ".gradle", "caches", "deps.jar"), []byte("jar"), 0644)
+
+	dst := filepath.Join(t.TempDir(), "clone")
+	c, _ := NewCloner(src)
+
+	if err := SelectiveClone(c, src, dst, []string{".gradle/configuration-cache"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dst, ".gradle", "caches", "deps.jar")); err != nil {
+		t.Error(".gradle/caches/deps.jar should exist")
+	}
+	if _, err := os.Stat(filepath.Join(dst, ".gradle", "configuration-cache")); !os.IsNotExist(err) {
+		t.Error(".gradle/configuration-cache should not exist in clone")
+	}
+}
+
+func TestSelectiveClone_GroveDirNeverExcluded(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	src := t.TempDir()
+	os.MkdirAll(filepath.Join(src, ".grove"), 0755)
+	os.WriteFile(filepath.Join(src, ".grove", "config.json"), []byte("{}"), 0644)
+
+	dst := filepath.Join(t.TempDir(), "clone")
+	c, _ := NewCloner(src)
+
+	if err := SelectiveClone(c, src, dst, []string{".grove"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dst, ".grove", "config.json")); err != nil {
+		t.Error(".grove/config.json should exist despite exclude pattern")
 	}
 }

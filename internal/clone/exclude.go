@@ -1,7 +1,9 @@
 package clone
 
 import (
+	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -105,4 +107,67 @@ func markAncestors(rel string, dirs map[string]bool) {
 		dirs[parent] = true
 		rel = parent
 	}
+}
+
+// SelectiveClone clones src to dst, excluding paths matching the given globs.
+// If excludes is empty, falls back to a single full clone.
+func SelectiveClone(cloner Cloner, src, dst string, excludes []string) error {
+	if len(excludes) == 0 {
+		return cloner.Clone(src, dst)
+	}
+
+	plan, err := buildClonePlan(src, excludes)
+	if err != nil {
+		return fmt.Errorf("planning clone: %w", err)
+	}
+
+	return executeClonePlan(cloner, src, dst, ".", excludes, plan)
+}
+
+// executeClonePlan recursively clones children of srcDir into dstDir,
+// skipping excluded entries and recursing into directories that contain excludes.
+func executeClonePlan(cloner Cloner, srcRoot, dstRoot, rel string, excludes []string, plan *clonePlan) error {
+	srcDir := filepath.Join(srcRoot, rel)
+	dstDir := filepath.Join(dstRoot, rel)
+
+	if rel == "." {
+		srcDir = srcRoot
+		dstDir = dstRoot
+	}
+
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		childRel := filepath.Join(rel, entry.Name())
+		if rel == "." {
+			childRel = entry.Name()
+		}
+
+		if isExcluded(childRel, excludes) {
+			continue
+		}
+
+		childSrc := filepath.Join(srcDir, entry.Name())
+		childDst := filepath.Join(dstDir, entry.Name())
+
+		if entry.IsDir() && plan.dirsWithExcludes[childRel] {
+			if err := executeClonePlan(cloner, srcRoot, dstRoot, childRel, excludes, plan); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Fast path: clone the entire entry with a single cp -c -R
+		if err := cloner.Clone(childSrc, childDst); err != nil {
+			return err
+		}
+	}
+	return nil
 }
