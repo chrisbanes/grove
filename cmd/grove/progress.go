@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/mandelsoft/ttyprogress"
 )
 
 type progressState struct {
@@ -30,20 +33,69 @@ type progressRenderer struct {
 	tty          bool
 	lastPercent  int
 	lastPhase    string
+	ttyContext   ttyprogress.Context
+	ttyBar       ttyprogress.Bar
 	lastWidth    int
 	wroteTTYLine bool
 }
 
+const progressPhaseVariable = "phase"
+
 func newProgressRenderer(w io.Writer, tty bool) *progressRenderer {
-	return &progressRenderer{
+	r := &progressRenderer{
 		w:           w,
 		tty:         tty,
 		lastPercent: -1,
 	}
+	if tty {
+		if _, ok := w.(*os.File); ok {
+			ctx, bar, err := newFancyProgress(w)
+			if err == nil {
+				r.ttyContext = ctx
+				r.ttyBar = bar
+			}
+		}
+	}
+	return r
+}
+
+func newFancyProgress(w io.Writer) (ttyprogress.Context, ttyprogress.Bar, error) {
+	ctx := ttyprogress.For(w)
+	bar, err := ttyprogress.NewBar().
+		SetPredefined(10).
+		SetTotal(100).
+		SetWidth(ttyprogress.ReserveTerminalSize(45)).
+		PrependElapsed().
+		PrependMessage("create").
+		AppendCompleted().
+		AppendMessage("phase:").
+		AppendVariable(progressPhaseVariable).
+		Add(ctx)
+	if err != nil {
+		_ = ctx.Close()
+		_ = ctx.Wait(context.Background())
+		return nil, nil, err
+	}
+	return ctx, bar, nil
 }
 
 func (r *progressRenderer) Update(percent int, phase string) {
 	percent = clampPercent(percent)
+	if r.ttyBar != nil {
+		if percent == r.lastPercent && phase == r.lastPhase {
+			return
+		}
+		phaseChanged := phase != r.lastPhase
+		r.lastPercent = percent
+		r.lastPhase = phase
+		r.ttyBar.SetVariable(progressPhaseVariable, phase)
+		r.ttyBar.Set(percent)
+		if phaseChanged {
+			_ = r.ttyBar.Flush()
+		}
+		return
+	}
+
 	if r.tty {
 		if percent == r.lastPercent && phase == r.lastPhase {
 			return
@@ -80,6 +132,15 @@ func (r *progressRenderer) Update(percent int, phase string) {
 }
 
 func (r *progressRenderer) Done() {
+	if r.ttyContext != nil {
+		if r.ttyBar != nil && !r.ttyBar.IsClosed() {
+			_ = r.ttyBar.Close()
+		}
+		_ = r.ttyContext.Close()
+		_ = r.ttyContext.Wait(context.Background())
+		return
+	}
+
 	if r.tty && r.wroteTTYLine {
 		fmt.Fprintln(r.w)
 	}
