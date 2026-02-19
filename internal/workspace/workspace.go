@@ -56,7 +56,7 @@ func Create(goldenRoot string, cfg *config.Config, cloner clone.Cloner, opts Cre
 	}
 
 	// CoW clone
-	if err := cloneWorkspace(cloner, goldenRoot, wsPath, opts.OnClone); err != nil {
+	if err := cloneWorkspace(cloner, goldenRoot, wsPath, cfg.Exclude, opts.OnClone); err != nil {
 		os.RemoveAll(wsPath) // clean up partial clone
 		return nil, fmt.Errorf("clone failed: %w", err)
 	}
@@ -79,13 +79,11 @@ func Create(goldenRoot string, cfg *config.Config, cloner clone.Cloner, opts Cre
 	return info, nil
 }
 
-func cloneWorkspace(cloner clone.Cloner, src, dst string, onClone clone.ProgressFunc) error {
+func cloneWorkspace(cloner clone.Cloner, src, dst string, excludes []string, onClone clone.ProgressFunc) error {
 	if onClone != nil {
-		if c, ok := cloner.(clone.ProgressCloner); ok {
-			return c.CloneWithProgress(src, dst, onClone)
-		}
+		return clone.SelectiveCloneWithProgress(cloner, src, dst, excludes, onClone)
 	}
-	return cloner.Clone(src, dst)
+	return clone.SelectiveClone(cloner, src, dst, excludes)
 }
 
 // List returns all workspaces in the configured workspace directory.
