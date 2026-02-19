@@ -36,3 +36,23 @@ func TestProgressRenderer_NonTTYLineMode(t *testing.T) {
 		t.Fatalf("expected non-tty output to include phase, got: %q", out)
 	}
 }
+
+func TestProgressRenderer_TTYClearsTrailingChars(t *testing.T) {
+	var buf bytes.Buffer
+	r := newProgressRenderer(&buf, true)
+	r.Update(95, "post-clone hook")
+	r.Update(100, "done")
+
+	out := buf.String()
+	lastCR := strings.LastIndex(out, "\r")
+	if lastCR == -1 {
+		t.Fatalf("expected tty output to include carriage return, got %q", out)
+	}
+	final := out[lastCR+1:]
+	if !strings.Contains(final, "done") {
+		t.Fatalf("expected final tty segment to include done phase, got %q", final)
+	}
+	if !strings.HasSuffix(final, " ") {
+		t.Fatalf("expected final tty segment to include trailing spaces for line clearing, got %q", final)
+	}
+}

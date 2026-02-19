@@ -30,6 +30,7 @@ type progressRenderer struct {
 	tty          bool
 	lastPercent  int
 	lastPhase    string
+	lastWidth    int
 	wroteTTYLine bool
 }
 
@@ -50,7 +51,13 @@ func (r *progressRenderer) Update(percent int, phase string) {
 		r.lastPercent = percent
 		r.lastPhase = phase
 		r.wroteTTYLine = true
-		fmt.Fprintf(r.w, "\r[%s] %3d%% %s", renderBar(percent, 24), percent, phase)
+		line := fmt.Sprintf("\r[%s] %3d%% %s", renderBar(percent, 24), percent, phase)
+		width := len(line) - 1 // exclude leading carriage return
+		if r.lastWidth > width {
+			line += strings.Repeat(" ", r.lastWidth-width)
+		}
+		r.lastWidth = width
+		fmt.Fprint(r.w, line)
 		return
 	}
 
