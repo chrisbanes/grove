@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/chrisbanes/grove/internal/clone"
 	"github.com/chrisbanes/grove/internal/config"
@@ -23,6 +24,27 @@ caches and gitignored files. Builds in the workspace start warm.
 Without --branch, the workspace stays on the golden copy's current branch.
 With --branch, a new git branch is created and checked out in the workspace.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		progressEnabled, _ := cmd.Flags().GetBool("progress")
+		var (
+			progressMu sync.Mutex
+			progress   *progressRenderer
+			cloneState *progressState
+		)
+		updateProgress := func(percent int, phase string) {
+			if progress == nil {
+				return
+			}
+			progressMu.Lock()
+			defer progressMu.Unlock()
+			progress.Update(percent, phase)
+		}
+		if progressEnabled {
+			progress = newProgressRenderer(os.Stderr, isTerminalFile(os.Stderr))
+			defer progress.Done()
+			cloneState = newProgressState(5, 95)
+			updateProgress(0, "preflight")
+		}
+
 		cwd, err := os.Getwd()
 		if err != nil {
 			return err
@@ -65,6 +87,7 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 		if err != nil {
 			return err
 		}
+		updateProgress(5, "clone")
 
 		// Get current commit
 		commit, _ := gitpkg.CurrentCommit(goldenRoot)
@@ -84,27 +107,43 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 			BranchForID:  branchForID,
 			GoldenCommit: commit,
 		}
+		if progressEnabled {
+			opts.OnClone = func(event clone.ProgressEvent) {
+				if event.Phase != "clone" {
+					return
+				}
+				progressMu.Lock()
+				defer progressMu.Unlock()
+				cloneState.updateClone(event.Copied, event.Total)
+				progress.Update(cloneState.percent, "clone")
+			}
+		}
 
 		info, err := workspace.Create(goldenRoot, cfg, cloner, opts)
 		if err != nil {
+			updateProgress(100, "failed")
 			return err
 		}
+		updateProgress(95, "post-clone hook")
 
 		// Run post-clone hook
 		if err := hooks.Run(info.Path, "post-clone"); err != nil {
 			// Clean up on hook failure
 			os.RemoveAll(info.Path)
+			updateProgress(100, "failed")
 			return fmt.Errorf("post-clone hook failed: %w\nWorkspace cleaned up", err)
 		}
 
 		// Checkout branch if specified
 		if branch != "" {
+			updateProgress(99, "branch checkout")
 			if err := gitpkg.Checkout(info.Path, branch, true); err != nil {
 				// Don't clean up — clone succeeded, branch is secondary
 				fmt.Fprintf(os.Stderr, "Warning: branch checkout failed: %v\n", err)
 			}
 			info.Branch = branch
 		}
+		updateProgress(100, "done")
 
 		// Output result
 		jsonOut, _ := cmd.Flags().GetBool("json")
@@ -131,5 +170,6 @@ func init() {
 	createCmd.Flags().String("branch", "", "Create and checkout a new git branch in the workspace (default: golden copy's current branch)")
 	createCmd.Flags().Bool("force", false, "Proceed even if golden copy has uncommitted changes")
 	createCmd.Flags().Bool("json", false, "Output workspace info as JSON")
+	createCmd.Flags().Bool("progress", false, "Show progress output for long-running create operations")
 	rootCmd.AddCommand(createCmd)
 }

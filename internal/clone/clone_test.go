@@ -23,6 +23,20 @@ func TestNewCloner_ReturnsCloner(t *testing.T) {
 	}
 }
 
+func TestNewCloner_ImplementsProgressCloner(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+	dir := t.TempDir()
+	c, err := clone.NewCloner(dir)
+	if err != nil {
+		t.Fatalf("expected cloner on macOS/APFS, got error: %v", err)
+	}
+	if _, ok := c.(clone.ProgressCloner); !ok {
+		t.Fatal("expected cloner to implement ProgressCloner")
+	}
+}
+
 func TestClone_CopiesAllFiles(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("APFS tests only run on macOS")

@@ -54,7 +54,7 @@ workspace a warm build cache from the start.
 ```
 grove init [path]             Initialize a golden copy from an existing repo
 grove update                  Pull latest + rebuild the golden copy (convenience)
-grove create [--branch NAME]  Create a new workspace from the golden copy
+grove create [--branch NAME] [--progress]  Create a new workspace from the golden copy
 grove list                    List active workspaces
 grove destroy <id|path>       Remove a workspace
 grove destroy --all           Remove all workspaces
@@ -88,7 +88,7 @@ the user re-running `update` when they choose to.
 1. `git pull`
 2. Run the configured warmup command
 
-### `grove create [--branch NAME]`
+### `grove create [--branch NAME] [--progress]`
 
 Creates a new workspace:
 
@@ -99,6 +99,10 @@ Creates a new workspace:
 5. Run post-clone hooks (`.grove/hooks/post-clone`)
 6. Check out the specified branch (or create one)
 7. Output workspace path (plain text default, `--json` for machine-readable)
+
+If `--progress` is set, create emits phase/percent progress updates during
+clone. Progress output is sent to `stderr` so `--json` output on `stdout`
+remains machine-readable.
 
 JSON output mode (for programmatic consumers):
 ```json
