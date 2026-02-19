@@ -107,3 +107,61 @@ func TestFindRepoRoot_NotFound(t *testing.T) {
 		t.Error("expected error when no .grove found")
 	}
 }
+
+func TestSaveAndLoad_Exclude(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+
+	cfg := &config.Config{
+		WorkspaceDir:  "/tmp/grove/test",
+		MaxWorkspaces: 5,
+		Exclude:       []string{"*.lock", "__pycache__", ".gradle/configuration-cache"},
+	}
+	if err := config.Save(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Exclude) != 3 {
+		t.Fatalf("expected 3 exclude patterns, got %d", len(loaded.Exclude))
+	}
+	if loaded.Exclude[0] != "*.lock" {
+		t.Errorf("expected '*.lock', got %q", loaded.Exclude[0])
+	}
+}
+
+func TestLoad_InvalidExcludePattern(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+	os.WriteFile(
+		filepath.Join(dir, ".grove", "config.json"),
+		[]byte(`{"workspace_dir": "/tmp/test", "exclude": ["[invalid"]}`),
+		0644,
+	)
+
+	_, err := config.Load(dir)
+	if err == nil {
+		t.Error("expected error for invalid exclude pattern")
+	}
+}
+
+func TestLoad_EmptyExclude(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+	os.WriteFile(
+		filepath.Join(dir, ".grove", "config.json"),
+		[]byte(`{"workspace_dir": "/tmp/test"}`),
+		0644,
+	)
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Exclude != nil {
+		t.Errorf("expected nil exclude, got %v", cfg.Exclude)
+	}
+}

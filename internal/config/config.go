@@ -16,9 +16,10 @@ const (
 )
 
 type Config struct {
-	WarmupCommand string `json:"warmup_command,omitempty"`
-	WorkspaceDir  string `json:"workspace_dir"`
-	MaxWorkspaces int    `json:"max_workspaces"`
+	WarmupCommand string   `json:"warmup_command,omitempty"`
+	WorkspaceDir  string   `json:"workspace_dir"`
+	MaxWorkspaces int      `json:"max_workspaces"`
+	Exclude       []string `json:"exclude,omitempty"`
 }
 
 func DefaultConfig(projectName string) *Config {
@@ -37,6 +38,11 @@ func Load(repoRoot string) (*Config, error) {
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	for _, pattern := range cfg.Exclude {
+		if _, err := filepath.Match(pattern, ""); err != nil {
+			return nil, fmt.Errorf("invalid exclude pattern %q: %w", pattern, err)
+		}
 	}
 	if cfg.MaxWorkspaces == 0 {
 		cfg.MaxWorkspaces = 10
