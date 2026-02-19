@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 )
@@ -54,5 +55,28 @@ func TestProgressRenderer_TTYClearsTrailingChars(t *testing.T) {
 	}
 	if !strings.HasSuffix(final, " ") {
 		t.Fatalf("expected final tty segment to include trailing spaces for line clearing, got %q", final)
+	}
+}
+
+func TestProgressRenderer_TTYUsesFancyRendererForFiles(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "progress-*.txt")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	defer f.Close()
+
+	r := newProgressRenderer(f, true)
+	if r.ttyBar == nil {
+		t.Fatal("expected ttyprogress bar for file-backed tty output")
+	}
+	r.Update(15, "clone")
+	r.Done()
+}
+
+func TestProgressRenderer_TTYFallsBackForNonFileWriter(t *testing.T) {
+	var buf bytes.Buffer
+	r := newProgressRenderer(&buf, true)
+	if r.ttyBar != nil {
+		t.Fatal("expected fallback tty renderer for non-file writers")
 	}
 }
