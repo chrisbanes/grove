@@ -46,10 +46,72 @@ func CurrentCommit(path string) (string, error) {
 func Pull(path string) error {
 	cmd := exec.Command("git", "-C", path, "pull")
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git pull: %w\n%s", err, out)
+	if err == nil {
+		return nil
 	}
-	return nil
+
+	// If the current branch has no upstream configured, retry by explicitly
+	// pulling the current branch from a sensible remote and then restore tracking.
+	if strings.Contains(string(out), "There is no tracking information for the current branch.") {
+		branch, branchErr := CurrentBranch(path)
+		if branchErr != nil || branch == "" {
+			return fmt.Errorf("git pull: %w\n%s", err, out)
+		}
+
+		remote, remoteErr := pullRemote(path, branch)
+		if remoteErr != nil {
+			return fmt.Errorf("git pull: %w\n%s", err, out)
+		}
+
+		fallback := exec.Command("git", "-C", path, "pull", remote, branch)
+		fallbackOut, fallbackErr := fallback.CombinedOutput()
+		if fallbackErr != nil {
+			return fmt.Errorf("git pull: %w\n%s", fallbackErr, fallbackOut)
+		}
+
+		setUpstream := exec.Command("git", "-C", path, "branch", "--set-upstream-to="+remote+"/"+branch, branch)
+		setUpstreamOut, setUpstreamErr := setUpstream.CombinedOutput()
+		if setUpstreamErr != nil {
+			return fmt.Errorf("git branch --set-upstream-to: %w\n%s", setUpstreamErr, setUpstreamOut)
+		}
+		return nil
+	}
+
+	return fmt.Errorf("git pull: %w\n%s", err, out)
+}
+
+func pullRemote(path, branch string) (string, error) {
+	branchRemote := exec.Command("git", "-C", path, "config", "--get", "branch."+branch+".remote")
+	branchRemoteOut, branchRemoteErr := branchRemote.Output()
+	if branchRemoteErr == nil {
+		remote := strings.TrimSpace(string(branchRemoteOut))
+		if remote != "" {
+			return remote, nil
+		}
+	}
+
+	remotesCmd := exec.Command("git", "-C", path, "remote")
+	remotesOut, remotesErr := remotesCmd.Output()
+	if remotesErr != nil {
+		return "", remotesErr
+	}
+
+	remotes := strings.Fields(string(remotesOut))
+	if len(remotes) == 0 {
+		return "", fmt.Errorf("no git remotes configured")
+	}
+
+	for _, remote := range remotes {
+		if remote == "origin" {
+			return remote, nil
+		}
+	}
+
+	if len(remotes) == 1 {
+		return remotes[0], nil
+	}
+
+	return "", fmt.Errorf("multiple remotes configured and no tracking remote for branch %s", branch)
 }
 
 // Push pushes a branch to origin.

@@ -33,6 +33,17 @@ func run(t *testing.T, dir, name string, args ...string) {
 	}
 }
 
+func runOutput(t *testing.T, dir, name string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s %v failed: %s\n%s", name, args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func TestIsRepo(t *testing.T) {
 	repo := setupRepo(t)
 	if !git.IsRepo(repo) {
@@ -148,5 +159,49 @@ func TestPush_ErrorIncludesGitOutput(t *testing.T) {
 	}
 	if !strings.Contains(msg, "fatal") {
 		t.Errorf("expected git stderr in error, got: %s", msg)
+	}
+}
+
+func TestPull_WithoutUpstream_UsesCurrentBranchAndSetsTracking(t *testing.T) {
+	remoteRoot := t.TempDir()
+	bareRepo := filepath.Join(remoteRoot, "remote.git")
+	run(t, remoteRoot, "git", "init", "--bare", bareRepo)
+
+	seedRepo := t.TempDir()
+	run(t, remoteRoot, "git", "clone", bareRepo, seedRepo)
+	run(t, seedRepo, "git", "config", "user.email", "test@test.com")
+	run(t, seedRepo, "git", "config", "user.name", "Test")
+	os.WriteFile(filepath.Join(seedRepo, "README.md"), []byte("# seed"), 0644)
+	run(t, seedRepo, "git", "add", ".")
+	run(t, seedRepo, "git", "commit", "-m", "seed")
+	branch := runOutput(t, seedRepo, "git", "branch", "--show-current")
+	run(t, seedRepo, "git", "push", "-u", "origin", branch)
+
+	localRepo := t.TempDir()
+	run(t, remoteRoot, "git", "clone", bareRepo, localRepo)
+	run(t, localRepo, "git", "config", "user.email", "test@test.com")
+	run(t, localRepo, "git", "config", "user.name", "Test")
+	run(t, localRepo, "git", "branch", "--unset-upstream")
+
+	pusherRepo := t.TempDir()
+	run(t, remoteRoot, "git", "clone", bareRepo, pusherRepo)
+	run(t, pusherRepo, "git", "config", "user.email", "test@test.com")
+	run(t, pusherRepo, "git", "config", "user.name", "Test")
+	os.WriteFile(filepath.Join(pusherRepo, "new-file.txt"), []byte("from remote"), 0644)
+	run(t, pusherRepo, "git", "add", ".")
+	run(t, pusherRepo, "git", "commit", "-m", "new file")
+	run(t, pusherRepo, "git", "push", "origin", branch)
+
+	if err := git.Pull(localRepo); err != nil {
+		t.Fatalf("expected pull to succeed without upstream tracking, got: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(localRepo, "new-file.txt")); err != nil {
+		t.Fatalf("expected pulled file in local repo, got: %v", err)
+	}
+
+	upstream := runOutput(t, localRepo, "git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+	if upstream != "origin/"+branch {
+		t.Fatalf("expected upstream to be origin/%s, got %s", branch, upstream)
 	}
 }
