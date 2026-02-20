@@ -1,13 +1,12 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
+	"github.com/chrisbanes/grove/internal/backend"
 	"github.com/chrisbanes/grove/internal/config"
 	gitpkg "github.com/chrisbanes/grove/internal/git"
-	"github.com/chrisbanes/grove/internal/image"
 	"github.com/chrisbanes/grove/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -29,6 +28,10 @@ var destroyCmd = &cobra.Command{
 		}
 
 		cfg, err := config.Load(goldenRoot)
+		if err != nil {
+			return err
+		}
+		backendImpl, err := backend.ForName(cfg.CloneBackend)
 		if err != nil {
 			return err
 		}
@@ -55,7 +58,7 @@ var destroyCmd = &cobra.Command{
 						continue
 					}
 				}
-				if err := destroyWorkspace(goldenRoot, cfg, ws.ID); err != nil {
+				if err := backendImpl.DestroyWorkspace(goldenRoot, cfg, ws.ID); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to destroy %s: %v\n", ws.ID, err)
 					continue
 				}
@@ -82,21 +85,12 @@ var destroyCmd = &cobra.Command{
 			}
 		}
 
-		if err := destroyWorkspace(goldenRoot, cfg, info.ID); err != nil {
+		if err := backendImpl.DestroyWorkspace(goldenRoot, cfg, info.ID); err != nil {
 			return err
 		}
 		fmt.Printf("Destroyed: %s\n", info.ID)
 		return nil
 	},
-}
-
-func destroyWorkspace(goldenRoot string, cfg *config.Config, id string) error {
-	if _, err := image.LoadWorkspaceMeta(goldenRoot, id); err == nil {
-		return image.DestroyWorkspace(goldenRoot, id, nil)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return workspace.Destroy(cfg, id)
 }
 
 func init() {

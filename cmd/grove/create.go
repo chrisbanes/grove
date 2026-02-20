@@ -6,13 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
+	"github.com/chrisbanes/grove/internal/backend"
 	"github.com/chrisbanes/grove/internal/clone"
 	"github.com/chrisbanes/grove/internal/config"
 	gitpkg "github.com/chrisbanes/grove/internal/git"
 	"github.com/chrisbanes/grove/internal/hooks"
-	"github.com/chrisbanes/grove/internal/image"
 	"github.com/chrisbanes/grove/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -69,6 +68,10 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 		if err := config.EnsureBackendCompatible(goldenRoot, cfg); err != nil {
 			return err
 		}
+		backendImpl, err := backend.ForName(cfg.CloneBackend)
+		if err != nil {
+			return err
+		}
 
 		// Expand workspace dir
 		projectName := getProjectName(goldenRoot)
@@ -102,93 +105,34 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 
 		updateProgress(5, "clone")
 
-		var info *workspace.Info
-		if cfg.CloneBackend == "image" {
-			st, err := image.LoadState(goldenRoot)
-			if err != nil {
-				updateProgress(100, "failed")
-				return fmt.Errorf("loading image backend state: %w", err)
-			}
-
-			existing, err := workspace.List(cfg)
-			if err != nil && !os.IsNotExist(err) {
-				updateProgress(100, "failed")
-				return err
-			}
-			if len(existing) >= cfg.MaxWorkspaces {
-				updateProgress(100, "failed")
-				return fmt.Errorf("max workspaces (%d) reached — destroy one first", cfg.MaxWorkspaces)
-			}
-
-			id, err := workspace.GenerateID(branchForID)
-			if err != nil {
-				updateProgress(100, "failed")
-				return fmt.Errorf("generating workspace ID: %w", err)
-			}
-			wsPath := filepath.Join(cfg.WorkspaceDir, id)
-
-			if err := os.MkdirAll(cfg.WorkspaceDir, 0755); err != nil {
-				updateProgress(100, "failed")
-				return fmt.Errorf("creating workspace directory: %w", err)
-			}
-
-			if _, err := image.CreateWorkspace(goldenRoot, goldenRoot, wsPath, id, st, nil); err != nil {
-				updateProgress(100, "failed")
-				return fmt.Errorf("image workspace create failed: %w", err)
-			}
-
-			info = &workspace.Info{
-				ID:           id,
-				GoldenCopy:   goldenRoot,
-				GoldenCommit: commit,
-				CreatedAt:    time.Now().UTC(),
-				Branch:       branch,
-				Path:         wsPath,
-			}
-			if err := workspace.WriteMarker(wsPath, info); err != nil {
-				_ = image.DestroyWorkspace(goldenRoot, id, nil)
-				updateProgress(100, "failed")
-				return fmt.Errorf("writing workspace marker: %w", err)
-			}
-		} else {
-			// Get CoW cloner
-			cloner, err := clone.NewCloner(goldenRoot)
-			if err != nil {
-				return err
-			}
-
-			opts := workspace.CreateOpts{
-				Branch:       branch,
-				BranchForID:  branchForID,
-				GoldenCommit: commit,
-			}
-			if progressEnabled {
-				opts.OnClone = func(event clone.ProgressEvent) {
-					if event.Phase != "clone" {
-						return
-					}
-					progressMu.Lock()
-					defer progressMu.Unlock()
-					cloneState.updateClone(event.Copied, event.Total)
-					progress.Update(cloneState.percent, "clone")
+		opts := backend.CreateOptions{
+			Branch:       branch,
+			BranchForID:  branchForID,
+			GoldenCommit: commit,
+		}
+		if progressEnabled {
+			opts.OnClone = func(event clone.ProgressEvent) {
+				if event.Phase != "clone" {
+					return
 				}
+				progressMu.Lock()
+				defer progressMu.Unlock()
+				cloneState.updateClone(event.Copied, event.Total)
+				progress.Update(cloneState.percent, "clone")
 			}
+		}
 
-			info, err = workspace.Create(goldenRoot, cfg, cloner, opts)
-			if err != nil {
-				updateProgress(100, "failed")
-				return err
-			}
+		info, err := backendImpl.CreateWorkspace(goldenRoot, cfg, opts)
+		if err != nil {
+			updateProgress(100, "failed")
+			return err
 		}
 		updateProgress(95, "post-clone hook")
 
 		// Run post-clone hook
 		if err := hooks.Run(info.Path, "post-clone"); err != nil {
-			if cfg.CloneBackend == "image" {
-				_ = image.DestroyWorkspace(goldenRoot, info.ID, nil)
-			} else {
-				// Clean up on hook failure
-				os.RemoveAll(info.Path)
+			if cleanupErr := backendImpl.DestroyWorkspace(goldenRoot, cfg, info.ID); cleanupErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: cleanup failed for %s: %v\n", info.ID, cleanupErr)
 			}
 			updateProgress(100, "failed")
 			return fmt.Errorf("post-clone hook failed: %w\nWorkspace cleaned up", err)
