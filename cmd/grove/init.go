@@ -8,6 +8,7 @@ import (
 
 	"github.com/chrisbanes/grove/internal/config"
 	gitpkg "github.com/chrisbanes/grove/internal/git"
+	"github.com/chrisbanes/grove/internal/image"
 	"github.com/spf13/cobra"
 )
 
@@ -68,6 +69,13 @@ Creates a .grove/ directory with config and optional hooks.`,
 		if wsDir != "" {
 			cfg.WorkspaceDir = wsDir
 		}
+		backend, _ := cmd.Flags().GetString("backend")
+		switch backend {
+		case "cp", "image":
+		default:
+			return fmt.Errorf("invalid --backend %q: expected cp or image", backend)
+		}
+		cfg.CloneBackend = backend
 
 		if err := config.Save(absPath, cfg); err != nil {
 			return fmt.Errorf("saving config: %w", err)
@@ -85,6 +93,17 @@ Creates a .grove/ directory with config and optional hooks.`,
 			}
 		}
 
+		if cfg.CloneBackend == "image" {
+			imageSizeGB, _ := cmd.Flags().GetInt("image-size-gb")
+			fmt.Println("Initializing image backend...")
+			if _, err := image.InitBase(absPath, nil, imageSizeGB); err != nil {
+				return fmt.Errorf("initializing image backend: %w", err)
+			}
+		}
+		if err := config.SaveBackendState(absPath, cfg.CloneBackend); err != nil {
+			return fmt.Errorf("saving backend state: %w", err)
+		}
+
 		fmt.Printf("Grove initialized at %s\n", absPath)
 		fmt.Printf("Workspace dir: %s\n", config.ExpandWorkspaceDir(cfg.WorkspaceDir, projectName))
 		return nil
@@ -94,6 +113,8 @@ Creates a .grove/ directory with config and optional hooks.`,
 func init() {
 	initCmd.Flags().String("warmup-command", "", "Command to run for warming up build caches")
 	initCmd.Flags().String("workspace-dir", "", "Directory for workspaces (default: /tmp/grove/{project})")
+	initCmd.Flags().String("backend", "cp", "Workspace backend: cp or image (experimental)")
+	initCmd.Flags().Int("image-size-gb", 200, "Base sparsebundle size in GB when using --backend image")
 	initCmd.Flags().Bool("force", false, "Proceed even if golden copy has uncommitted changes")
 	rootCmd.AddCommand(initCmd)
 }

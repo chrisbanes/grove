@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/chrisbanes/grove/internal/backend"
 	"github.com/chrisbanes/grove/internal/config"
 	gitpkg "github.com/chrisbanes/grove/internal/git"
 	"github.com/chrisbanes/grove/internal/workspace"
@@ -30,6 +31,10 @@ var destroyCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		backendImpl, err := backend.ForName(cfg.CloneBackend)
+		if err != nil {
+			return err
+		}
 
 		projectName := getProjectName(goldenRoot)
 		cfg.WorkspaceDir = config.ExpandWorkspaceDir(cfg.WorkspaceDir, projectName)
@@ -53,7 +58,7 @@ var destroyCmd = &cobra.Command{
 						continue
 					}
 				}
-				if err := workspace.Destroy(cfg, ws.ID); err != nil {
+				if err := backendImpl.DestroyWorkspace(goldenRoot, cfg, ws.ID); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to destroy %s: %v\n", ws.ID, err)
 					continue
 				}
@@ -67,19 +72,23 @@ var destroyCmd = &cobra.Command{
 		}
 
 		idOrPath := args[0]
+		info, err := workspace.Get(cfg, idOrPath)
+		if err != nil {
+			return err
+		}
+
 		if push {
-			info, err := workspace.Get(cfg, idOrPath)
-			if err == nil && info.Branch != "" {
+			if info.Branch != "" {
 				if err := gitpkg.Push(info.Path, info.Branch); err != nil {
 					return fmt.Errorf("push failed for %s (%s): %w", info.ID, info.Branch, err)
 				}
 			}
 		}
 
-		if err := workspace.Destroy(cfg, idOrPath); err != nil {
+		if err := backendImpl.DestroyWorkspace(goldenRoot, cfg, info.ID); err != nil {
 			return err
 		}
-		fmt.Printf("Destroyed: %s\n", idOrPath)
+		fmt.Printf("Destroyed: %s\n", info.ID)
 		return nil
 	},
 }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/chrisbanes/grove/internal/backend"
 	"github.com/chrisbanes/grove/internal/clone"
 	"github.com/chrisbanes/grove/internal/config"
 	gitpkg "github.com/chrisbanes/grove/internal/git"
@@ -64,6 +65,13 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 		if err != nil {
 			return err
 		}
+		if err := config.EnsureBackendCompatible(goldenRoot, cfg); err != nil {
+			return err
+		}
+		backendImpl, err := backend.ForName(cfg.CloneBackend)
+		if err != nil {
+			return err
+		}
 
 		// Expand workspace dir
 		projectName := getProjectName(goldenRoot)
@@ -82,16 +90,6 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 					"Use --force to proceed anyway")
 		}
 
-		// Get CoW cloner
-		cloner, err := clone.NewCloner(goldenRoot)
-		if err != nil {
-			return err
-		}
-		updateProgress(5, "clone")
-
-		// Get current commit
-		commit, _ := gitpkg.CurrentCommit(goldenRoot)
-
 		branch, _ := cmd.Flags().GetString("branch")
 
 		// If no branch specified, detect the golden copy's current branch for the ID
@@ -102,7 +100,12 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 			}
 		}
 
-		opts := workspace.CreateOpts{
+		// Get current commit
+		commit, _ := gitpkg.CurrentCommit(goldenRoot)
+
+		updateProgress(5, "clone")
+
+		opts := backend.CreateOptions{
 			Branch:       branch,
 			BranchForID:  branchForID,
 			GoldenCommit: commit,
@@ -119,7 +122,7 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 			}
 		}
 
-		info, err := workspace.Create(goldenRoot, cfg, cloner, opts)
+		info, err := backendImpl.CreateWorkspace(goldenRoot, cfg, opts)
 		if err != nil {
 			updateProgress(100, "failed")
 			return err
@@ -128,8 +131,9 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 
 		// Run post-clone hook
 		if err := hooks.Run(info.Path, "post-clone"); err != nil {
-			// Clean up on hook failure
-			os.RemoveAll(info.Path)
+			if cleanupErr := backendImpl.DestroyWorkspace(goldenRoot, cfg, info.ID); cleanupErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: cleanup failed for %s: %v\n", info.ID, cleanupErr)
+			}
 			updateProgress(100, "failed")
 			return fmt.Errorf("post-clone hook failed: %w\nWorkspace cleaned up", err)
 		}

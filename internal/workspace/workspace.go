@@ -71,7 +71,7 @@ func Create(goldenRoot string, cfg *config.Config, cloner clone.Cloner, opts Cre
 	}
 
 	// Write workspace marker
-	if err := writeMarker(wsPath, info); err != nil {
+	if err := WriteMarker(wsPath, info); err != nil {
 		os.RemoveAll(wsPath)
 		return nil, fmt.Errorf("writing workspace marker: %w", err)
 	}
@@ -158,7 +158,8 @@ func resolveWorkspace(cfg *config.Config, idOrPath string) (string, error) {
 	return "", fmt.Errorf("workspace not found: %s", idOrPath)
 }
 
-func writeMarker(wsPath string, info *Info) error {
+// WriteMarker writes the workspace marker file at wsPath/.grove/workspace.json.
+func WriteMarker(wsPath string, info *Info) error {
 	data, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
 		return err

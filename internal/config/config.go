@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 const (
 	GroveDirName  = ".grove"
 	ConfigFile    = "config.json"
+	BackendFile   = "backend.json"
 	WorkspaceFile = "workspace.json"
 	HooksDir      = "hooks"
 )
@@ -20,6 +22,7 @@ type Config struct {
 	WorkspaceDir  string   `json:"workspace_dir"`
 	MaxWorkspaces int      `json:"max_workspaces"`
 	Exclude       []string `json:"exclude,omitempty"`
+	CloneBackend  string   `json:"clone_backend,omitempty"`
 }
 
 func DefaultConfig(projectName string) *Config {
@@ -47,7 +50,24 @@ func Load(repoRoot string) (*Config, error) {
 	if cfg.MaxWorkspaces == 0 {
 		cfg.MaxWorkspaces = 10
 	}
+	backend, err := normalizeCloneBackend(cfg.CloneBackend)
+	if err != nil {
+		return nil, err
+	}
+	cfg.CloneBackend = backend
 	return &cfg, nil
+}
+
+func normalizeCloneBackend(value string) (string, error) {
+	if value == "" {
+		return "cp", nil
+	}
+	switch value {
+	case "cp", "image":
+		return value, nil
+	default:
+		return "", fmt.Errorf("invalid clone_backend %q: expected cp or image", value)
+	}
 }
 
 func Save(repoRoot string, cfg *Config) error {
@@ -83,4 +103,74 @@ func FindGroveRoot(startPath string) (string, error) {
 		}
 		dir = parent
 	}
+}
+
+type backendState struct {
+	Backend string `json:"backend"`
+}
+
+// EnsureBackendCompatible ensures the configured backend matches the initialized backend.
+// If no backend state exists yet, this bootstraps it for cp repos and image repos that already
+// have image state. It returns actionable errors for backend mismatches or uninitialized image mode.
+func EnsureBackendCompatible(repoRoot string, cfg *Config) error {
+	backend, err := LoadBackendState(repoRoot)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err == nil {
+		if backend != cfg.CloneBackend {
+			return fmt.Errorf("configured clone_backend is %q but initialized backend is %q.\nRun `grove migrate --to %s`", cfg.CloneBackend, backend, cfg.CloneBackend)
+		}
+		return nil
+	}
+
+	imageStatePath := filepath.Join(repoRoot, GroveDirName, "images", "state.json")
+	_, imageStateErr := os.Stat(imageStatePath)
+	hasImageState := imageStateErr == nil
+
+	switch cfg.CloneBackend {
+	case "cp":
+		if hasImageState {
+			return fmt.Errorf("configured clone_backend is %q but initialized backend appears to be %q.\nRun `grove migrate --to %s`", "cp", "image", "cp")
+		}
+		return SaveBackendState(repoRoot, "cp")
+	case "image":
+		if !hasImageState {
+			return fmt.Errorf("image backend is not initialized.\nRun `grove migrate --to image`")
+		}
+		return SaveBackendState(repoRoot, "image")
+	default:
+		return fmt.Errorf("invalid clone_backend %q: expected cp or image", cfg.CloneBackend)
+	}
+}
+
+func LoadBackendState(repoRoot string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(repoRoot, GroveDirName, BackendFile))
+	if err != nil {
+		return "", err
+	}
+	var st backendState
+	if err := json.Unmarshal(data, &st); err != nil {
+		return "", err
+	}
+	backend, err := normalizeCloneBackend(st.Backend)
+	if err != nil {
+		return "", err
+	}
+	return backend, nil
+}
+
+func SaveBackendState(repoRoot, backend string) error {
+	normalized, err := normalizeCloneBackend(backend)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Join(repoRoot, GroveDirName), 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(&backendState{Backend: normalized}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(repoRoot, GroveDirName, BackendFile), data, 0644)
 }

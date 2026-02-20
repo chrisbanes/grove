@@ -87,19 +87,28 @@ grove init --warmup-command "npm run build" --workspace-dir ~/workspaces/myproje
 # Running warmup: npm run build
 # Grove initialized at /Users/you/dev/myproject
 # Workspace dir: /Users/you/workspaces/myproject
+
+# Experimental image backend (macOS): creates a base sparsebundle
+grove init --backend image --image-size-gb 200
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--warmup-command` | Shell command to warm build caches (runs during init and update) |
 | `--workspace-dir` | Directory for workspaces (default: `/tmp/grove/{project}`) |
+| `--backend` | Workspace backend (`cp` default, `image` experimental) |
+| `--image-size-gb` | Base sparsebundle size in GB for `--backend image` |
 | `--force` | Proceed even if the golden copy has uncommitted changes |
 
 ### `grove create`
 
-Create a CoW clone workspace from the golden copy. Without `--branch`, the
-workspace stays on the golden copy's current branch. With `--branch`, Grove
-creates and checks out a new git branch in the workspace.
+Create a workspace from the golden copy using the configured backend:
+
+- `clone_backend: "cp"` (default): APFS directory clone (`cp -c -R`)
+- `clone_backend: "image"` (experimental): attach base sparsebundle with per-workspace shadow
+
+Without `--branch`, the workspace stays on the golden copy's current branch.
+With `--branch`, Grove creates and checks out a new git branch in the workspace.
 
 ```bash
 grove create --branch feature/auth
@@ -168,6 +177,9 @@ grove list
 
 Remove a workspace. Takes a workspace ID or absolute path.
 
+- `cp` backend workspaces are removed by deleting the directory.
+- `image` backend workspaces are detached first, then shadow + metadata are removed.
+
 ```bash
 # Destroy a single workspace
 grove destroy feature-auth-f7e8
@@ -195,8 +207,12 @@ Pull the latest changes and re-run the warmup command on the golden copy.
 grove update
 # Pulling latest...
 # Running warmup: ./gradlew assemble
+# Refreshing image backend...   # when clone_backend is "image"
 # Golden copy updated to abc1234
 ```
+
+If `clone_backend` is `image`, `update` performs an incremental base refresh.
+For safety, refresh is refused while image-backed workspaces are active.
 
 ### `grove status`
 
@@ -231,7 +247,8 @@ Grove stores its configuration in `.grove/config.json` inside the golden copy:
   "warmup_command": "./gradlew assemble",
   "workspace_dir": "/tmp/grove/{project}",
   "max_workspaces": 10,
-  "exclude": ["*.lock", "__pycache__", ".gradle/configuration-cache"]
+  "exclude": ["*.lock", "__pycache__", ".gradle/configuration-cache"],
+  "clone_backend": "cp"
 }
 ```
 
@@ -241,6 +258,36 @@ Grove stores its configuration in `.grove/config.json` inside the golden copy:
 | `workspace_dir` | Where workspaces are created. `{project}` expands to the golden copy's directory name. | `/tmp/grove/{project}` |
 | `max_workspaces` | Maximum concurrent workspaces. Prevents disk exhaustion. | `10` |
 | `exclude` | Glob patterns for files/directories to skip when cloning. See [Exclude Patterns](#exclude-patterns). | `[]` |
+| `clone_backend` | Workspace backend: `cp` (default) or `image` (experimental, macOS). | `cp` |
+
+## Backend Comparison
+
+| Characteristic | `cp` (default) | `image` (experimental, macOS) |
+|----------------|----------------|--------------------------------|
+| Create speed | Fast APFS clone via `cp -c -R`; can become metadata-bound in very large repos | Very fast create via base image attach + per-workspace shadow |
+| Disk space | CoW shared blocks with low operational overhead | Higher overhead from base image + shadows; can approach ~2x in worst case |
+| Operational complexity | Simple lifecycle, no extra backend state | More complex mount/attach/detach state and metadata handling |
+| Update behavior | `grove update` does git pull + optional warmup | Adds incremental base image refresh during `grove update` |
+| Safety constraints | Fewer backend-specific guards | Refresh/migration guarded while image-backed workspaces are active |
+| Platform support | macOS/APFS | macOS-only and still experimental |
+| Best for | Most repositories and teams prioritizing predictability | Very large repos where `cp -c -R` clone time is the bottleneck |
+
+## Experimental Image Backend
+
+The `image` backend is for large repositories where raw `cp -c -R` clone time
+is dominated by filesystem metadata work.
+
+Model:
+
+- base image: `.grove/images/base.sparsebundle`
+- per-workspace overlay: `.grove/shadows/<id>.shadow`
+- workspace metadata: `.grove/workspaces/<id>.json`
+
+`grove create` attaches the base image with a workspace-specific shadow, which
+makes create time mount-time fast.
+
+`grove update` incrementally refreshes the base via `rsync` and is blocked while
+any image-backed workspace is active.
 
 **Warmup command examples by ecosystem:**
 

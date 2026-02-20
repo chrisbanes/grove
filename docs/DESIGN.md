@@ -35,7 +35,9 @@ to maintain separate checkouts and `grove init` each one independently.
 
 A CoW filesystem clone of the golden copy:
 
-- Created near-instantly via `cp -c -R` (macOS/APFS) or `cp --reflink=always` (Linux/Btrfs)
+- Created via selected backend:
+  - `cp` (default): `cp -c -R` (macOS/APFS)
+  - `image` (experimental): APFS sparsebundle base + per-workspace shadow mount
 - Fully isolated — each agent gets its own working tree
 - Short-lived: created for a task, destroyed when done
 - Inherits warm build state, so incremental builds work immediately
@@ -75,7 +77,8 @@ Config stored in `.grove/config.json`:
 {
   "warmup_command": "./gradlew assemble",
   "workspace_dir": "/tmp/grove/{project}",
-  "max_workspaces": 10
+  "max_workspaces": 10,
+  "clone_backend": "cp"
 }
 ```
 
@@ -87,6 +90,9 @@ the user re-running `update` when they choose to.
 
 1. `git pull`
 2. Run the configured warmup command
+3. If `clone_backend` is `image`, refresh the base image incrementally
+   (`rsync` into mounted sparsebundle). Refuse refresh while image-backed
+   workspaces are active.
 
 ### `grove create [--branch NAME] [--progress]`
 
@@ -94,7 +100,9 @@ Creates a new workspace:
 
 1. Verify filesystem supports CoW (error out if not — see [Error Handling](#error-handling))
 2. Check golden copy for uncommitted changes (warn + require `--force`)
-3. CoW clone golden copy to workspace directory
+3. Create workspace using configured backend:
+   - `cp`: CoW clone golden copy to workspace directory
+   - `image`: attach base sparsebundle with per-workspace shadow
 4. Write workspace marker file (`.grove/workspace.json`)
 5. Run post-clone hooks (`.grove/hooks/post-clone`)
 6. Check out the specified branch (or create one)
@@ -129,8 +137,10 @@ Supports `--json` for machine-readable output.
 
 ### `grove destroy <id|path>`
 
-Removes a workspace via `rm -rf`. Optionally pushes the branch first
-with `--push`.
+Removes a workspace. Optionally pushes the branch first with `--push`.
+
+- `cp` backend: remove workspace directory.
+- `image` backend: detach mounted device, remove shadow + metadata, remove mountpoint.
 
 ## Metadata & State
 
@@ -147,9 +157,16 @@ same config:
 {
   "warmup_command": "./gradlew assemble",
   "workspace_dir": "/tmp/grove/{project}",
-  "max_workspaces": 10
+  "max_workspaces": 10,
+  "clone_backend": "cp"
 }
 ```
+
+When `clone_backend` is `image`, additional internal state is stored under:
+
+- `.grove/images/state.json`
+- `.grove/workspaces/<id>.json`
+- `.grove/shadows/`
 
 ### Workspace Marker (`.grove/workspace.json`)
 

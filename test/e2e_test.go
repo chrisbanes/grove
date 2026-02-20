@@ -249,6 +249,162 @@ func TestFullLifecycle(t *testing.T) {
 	}
 }
 
+func TestImageBackendLifecycle(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("image backend tests only run on macOS")
+	}
+
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+
+	// Initialize with the experimental image backend.
+	grove(t, binary, repo, "init", "--backend", "image", "--image-size-gb", "5")
+
+	// Create workspace and validate marker + metadata.
+	out := grove(t, binary, repo, "create", "--json")
+	var info workspace.Info
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		t.Fatalf("invalid JSON output: %s\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(info.Path, ".grove", config.WorkspaceFile)); err != nil {
+		t.Fatalf("expected workspace marker: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".grove", "workspaces", info.ID+".json")); err != nil {
+		t.Fatalf("expected image workspace metadata: %v", err)
+	}
+
+	// Destroy should detach and clean workspace metadata.
+	grove(t, binary, repo, "destroy", info.ID)
+	if _, err := os.Stat(info.Path); !os.IsNotExist(err) {
+		t.Fatalf("expected workspace path removed, got err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".grove", "workspaces", info.ID+".json")); !os.IsNotExist(err) {
+		t.Fatalf("expected image workspace metadata removed, got err=%v", err)
+	}
+}
+
+func TestBackendMismatchRequiresMigration(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+	grove(t, binary, repo, "init")
+
+	cfgPath := filepath.Join(repo, ".grove", "config.json")
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+	cfg["clone_backend"] = "image"
+	patched, _ := json.MarshalIndent(cfg, "", "  ")
+	if err := os.WriteFile(cfgPath, patched, 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	createErr := groveExpectErr(t, binary, repo, "create")
+	if !strings.Contains(createErr, "grove migrate --to image") {
+		t.Fatalf("expected migrate guidance from create, got: %s", createErr)
+	}
+
+	updateErr := groveExpectErr(t, binary, repo, "update")
+	if !strings.Contains(updateErr, "grove migrate --to image") {
+		t.Fatalf("expected migrate guidance from update, got: %s", updateErr)
+	}
+}
+
+func TestMigrateCommand(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+	grove(t, binary, repo, "init")
+
+	// cp -> image
+	out := grove(t, binary, repo, "migrate", "--to", "image", "--image-size-gb", "5")
+	if !strings.Contains(out, "Migrated backend to image") {
+		t.Fatalf("expected migrate success message, got: %s", out)
+	}
+
+	created := grove(t, binary, repo, "create", "--json")
+	var ws workspace.Info
+	if err := json.Unmarshal([]byte(created), &ws); err != nil {
+		t.Fatalf("invalid create JSON: %v\n%s", err, created)
+	}
+
+	// migrating back should fail while image workspace is active
+	errOut := groveExpectErr(t, binary, repo, "migrate", "--to", "cp")
+	if !strings.Contains(errOut, "active image workspaces") {
+		t.Fatalf("expected active workspace guard, got: %s", errOut)
+	}
+
+	grove(t, binary, repo, "destroy", ws.ID)
+
+	// image -> cp
+	out = grove(t, binary, repo, "migrate", "--to", "cp")
+	if !strings.Contains(out, "Migrated backend to cp") {
+		t.Fatalf("expected migrate success message, got: %s", out)
+	}
+
+	// cp create path should still work.
+	grove(t, binary, repo, "create")
+	grove(t, binary, repo, "destroy", "--all")
+}
+
+func TestMigrateCommand_ConfigMismatchUsesInitializedBackend(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+	grove(t, binary, repo, "init")
+
+	// Move to image backend and create an active image workspace.
+	grove(t, binary, repo, "migrate", "--to", "image", "--image-size-gb", "5")
+	created := grove(t, binary, repo, "create", "--json")
+	var ws workspace.Info
+	if err := json.Unmarshal([]byte(created), &ws); err != nil {
+		t.Fatalf("invalid create JSON: %v\n%s", err, created)
+	}
+
+	// Simulate a manual config edit that desynchronizes configured and initialized backends.
+	cfgPath := filepath.Join(repo, ".grove", "config.json")
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+	cfg["clone_backend"] = "cp"
+	patched, _ := json.MarshalIndent(cfg, "", "  ")
+	if err := os.WriteFile(cfgPath, patched, 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	// migrate --to cp must use initialized backend (image) and enforce active workspace guard.
+	errOut := groveExpectErr(t, binary, repo, "migrate", "--to", "cp")
+	if !strings.Contains(errOut, "active image workspaces") {
+		t.Fatalf("expected active workspace guard, got: %s", errOut)
+	}
+
+	// After cleanup, migrate to cp should succeed.
+	grove(t, binary, repo, "destroy", ws.ID)
+	out := grove(t, binary, repo, "migrate", "--to", "cp")
+	if !strings.Contains(out, "Migrated backend to cp") {
+		t.Fatalf("expected migrate success message, got: %s", out)
+	}
+}
+
 func TestPostCloneHook(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("APFS tests only run on macOS")

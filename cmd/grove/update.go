@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/chrisbanes/grove/internal/backend"
 	"github.com/chrisbanes/grove/internal/config"
 	gitpkg "github.com/chrisbanes/grove/internal/git"
 	"github.com/spf13/cobra"
@@ -29,6 +30,13 @@ var updateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if err := config.EnsureBackendCompatible(goldenRoot, cfg); err != nil {
+			return err
+		}
+		backendImpl, err := backend.ForName(cfg.CloneBackend)
+		if err != nil {
+			return err
+		}
 
 		fmt.Println("Pulling latest...")
 		if err := gitpkg.Pull(goldenRoot); err != nil {
@@ -47,6 +55,12 @@ var updateCmd = &cobra.Command{
 		}
 
 		commit, _ := gitpkg.CurrentCommit(goldenRoot)
+		if backendImpl.Name() == "image" {
+			fmt.Println("Refreshing image backend...")
+		}
+		if err := backendImpl.RefreshBase(goldenRoot, commit); err != nil {
+			return err
+		}
 		fmt.Printf("Golden copy updated to %s\n", commit)
 		return nil
 	},
