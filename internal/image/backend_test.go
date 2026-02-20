@@ -55,6 +55,67 @@ func TestInitBase_CreatesStateAndRunsCommands(t *testing.T) {
 	}
 }
 
+func TestInitBase_CallsOnProgress(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	r := &fakeRunner{
+		outputs: [][]byte{
+			nil, // CreateSparseBundle
+			[]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>system-entities</key>
+  <array>
+    <dict><key>dev-entry</key><string>/dev/disk9</string></dict>
+    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, ".grove", "mnt", "base") + `</string></dict>
+  </array>
+</dict>
+</plist>`), // Attach
+		},
+		streamLines: []string{
+			"  4,585,881,600  50%  109.38MB/s    0:01:02",
+			"  7,643,136,000 100%  109.38MB/s    0:01:02 (xfr#1, to-chk=0/100)",
+		},
+	}
+
+	var phases []string
+	var percents []int
+	onProgress := func(pct int, phase string) {
+		phases = append(phases, phase)
+		percents = append(percents, pct)
+	}
+
+	st, err := InitBase(repoRoot, r, 20, onProgress)
+	if err != nil {
+		t.Fatalf("InitBase() error = %v", err)
+	}
+	if st.Backend != "image" {
+		t.Fatalf("expected backend image, got %q", st.Backend)
+	}
+
+	// Should have progress callbacks: creating base image, syncing (2 rsync updates), done
+	if len(phases) < 3 {
+		t.Fatalf("expected at least 3 progress callbacks, got %d: phases=%v percents=%v", len(phases), phases, percents)
+	}
+	if phases[0] != "creating base image" {
+		t.Fatalf("expected first phase 'creating base image', got %q", phases[0])
+	}
+	if phases[len(phases)-1] != "done" {
+		t.Fatalf("expected last phase 'done', got %q", phases[len(phases)-1])
+	}
+	if percents[len(percents)-1] != 100 {
+		t.Fatalf("expected final percent 100, got %d", percents[len(percents)-1])
+	}
+
+	// Verify SyncBaseWithProgress was used (Stream called) instead of SyncBase (CombinedOutput)
+	if len(r.streamCalls) != 1 {
+		t.Fatalf("expected 1 stream call for rsync, got %d", len(r.streamCalls))
+	}
+	if r.streamCalls[0].name != "rsync" {
+		t.Fatalf("expected stream call to rsync, got %q", r.streamCalls[0].name)
+	}
+}
+
 func TestRefreshBase_RefusesWhenWorkspacesExist(t *testing.T) {
 	repoRoot := t.TempDir()
 	if err := SaveState(repoRoot, &State{
