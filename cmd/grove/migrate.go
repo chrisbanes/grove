@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/chrisbanes/grove/internal/config"
 	"github.com/chrisbanes/grove/internal/image"
@@ -41,7 +42,18 @@ var migrateCmd = &cobra.Command{
 			return fmt.Errorf("invalid --to %q: expected cp or image", to)
 		}
 
-		if cfg.CloneBackend == to {
+		currentBackend, err := detectInitializedBackend(goldenRoot)
+		if err != nil {
+			return err
+		}
+
+		if currentBackend == to {
+			if cfg.CloneBackend != to {
+				cfg.CloneBackend = to
+				if err := config.Save(goldenRoot, cfg); err != nil {
+					return fmt.Errorf("saving config: %w", err)
+				}
+			}
 			if err := config.SaveBackendState(goldenRoot, to); err != nil {
 				return err
 			}
@@ -91,3 +103,21 @@ func init() {
 	rootCmd.AddCommand(migrateCmd)
 }
 
+func detectInitializedBackend(repoRoot string) (string, error) {
+	backend, err := config.LoadBackendState(repoRoot)
+	if err == nil {
+		return backend, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	legacyImageStatePath := filepath.Join(repoRoot, config.GroveDirName, "images", "state.json")
+	if _, err := os.Stat(legacyImageStatePath); err == nil {
+		return "image", nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	return "cp", nil
+}
