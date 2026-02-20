@@ -17,6 +17,13 @@ var migrateCmd = &cobra.Command{
 	Short: "Migrate workspace backend safely",
 	Long:  `Migrates an initialized golden copy between cp and image backends.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		progressEnabled, _ := cmd.Flags().GetBool("progress")
+		var progress *progressRenderer
+		if progressEnabled {
+			progress = newProgressRenderer(os.Stderr, isTerminalFile(os.Stderr), "migrate")
+			defer progress.Done()
+		}
+
 		cwd, err := os.Getwd()
 		if err != nil {
 			return err
@@ -68,8 +75,16 @@ var migrateCmd = &cobra.Command{
 					return fmt.Errorf("loading image backend state: %w", err)
 				}
 				sizeGB, _ := cmd.Flags().GetInt("image-size-gb")
-				fmt.Println("Initializing image backend...")
-				if _, err := image.InitBase(goldenRoot, nil, sizeGB, nil); err != nil {
+				if progress == nil {
+					fmt.Println("Initializing image backend...")
+				}
+				var onProgress func(int, string)
+				if progress != nil {
+					onProgress = func(pct int, phase string) {
+						progress.Update(pct, phase)
+					}
+				}
+				if _, err := image.InitBase(goldenRoot, nil, sizeGB, onProgress); err != nil {
 					return fmt.Errorf("initializing image backend: %w", err)
 				}
 			}
@@ -99,6 +114,7 @@ var migrateCmd = &cobra.Command{
 func init() {
 	migrateCmd.Flags().String("to", "", "Target backend: cp or image")
 	migrateCmd.Flags().Int("image-size-gb", 200, "Base sparsebundle size in GB when migrating to image")
+	migrateCmd.Flags().Bool("progress", false, "Show progress output during image backend initialization")
 	_ = migrateCmd.MarkFlagRequired("to")
 	rootCmd.AddCommand(migrateCmd)
 }
