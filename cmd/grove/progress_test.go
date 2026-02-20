@@ -27,7 +27,7 @@ func TestProgressState_ClampBounds(t *testing.T) {
 
 func TestProgressRenderer_NonTTYLineMode(t *testing.T) {
 	var buf bytes.Buffer
-	r := newProgressRenderer(&buf, false)
+	r := newProgressRenderer(&buf, false, "create")
 	r.Update(35, "clone")
 	out := buf.String()
 	if !strings.Contains(out, "[35%]") {
@@ -40,7 +40,7 @@ func TestProgressRenderer_NonTTYLineMode(t *testing.T) {
 
 func TestProgressRenderer_TTYClearsTrailingChars(t *testing.T) {
 	var buf bytes.Buffer
-	r := newProgressRenderer(&buf, true)
+	r := newProgressRenderer(&buf, true, "create")
 	r.Update(95, "post-clone hook")
 	r.Update(100, "done")
 
@@ -65,7 +65,7 @@ func TestProgressRenderer_TTYUsesFancyRendererForFiles(t *testing.T) {
 	}
 	defer f.Close()
 
-	r := newProgressRenderer(f, true)
+	r := newProgressRenderer(f, true, "create")
 	if r.ttyBar == nil {
 		t.Fatal("expected ttyprogress bar for file-backed tty output")
 	}
@@ -75,8 +75,23 @@ func TestProgressRenderer_TTYUsesFancyRendererForFiles(t *testing.T) {
 
 func TestProgressRenderer_TTYFallsBackForNonFileWriter(t *testing.T) {
 	var buf bytes.Buffer
-	r := newProgressRenderer(&buf, true)
+	r := newProgressRenderer(&buf, true, "create")
 	if r.ttyBar != nil {
 		t.Fatal("expected fallback tty renderer for non-file writers")
 	}
+}
+
+func TestNewFancyProgress_UsesCustomLabel(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "progress-*.txt")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	defer f.Close()
+
+	r := newProgressRenderer(f, true, "init")
+	if r.ttyBar == nil {
+		t.Fatal("expected ttyprogress bar")
+	}
+	r.Update(15, "syncing")
+	r.Done()
 }

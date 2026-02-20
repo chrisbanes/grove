@@ -1,7 +1,9 @@
 package image
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -10,6 +12,7 @@ import (
 // Runner executes external commands.
 type Runner interface {
 	CombinedOutput(name string, args ...string) ([]byte, error)
+	Stream(name string, args []string, onLine func(string)) error
 }
 
 type execRunner struct{}
@@ -19,6 +22,45 @@ func (execRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
+func (execRunner) Stream(name string, args []string, onLine func(string)) error {
+	cmd := exec.Command(name, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	scanner.Split(scanCRLF)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			onLine(line)
+		}
+	}
+	return cmd.Wait()
+}
+
+// scanCRLF is a bufio.SplitFunc that splits on both \r and \n.
+// This is needed for rsync --info=progress2 which uses \r to overwrite lines.
+func scanCRLF(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	for i, b := range data {
+		if b == '\n' || b == '\r' {
+			return i + 1, data[:i], nil
+		}
+	}
+	if atEOF {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
+}
+
 // AttachedVolume describes an attached disk image volume.
 type AttachedVolume struct {
 	Device     string
@@ -26,9 +68,20 @@ type AttachedVolume struct {
 }
 
 var (
-	dictPattern      = regexp.MustCompile(`(?s)<dict>(.*?)</dict>`)
-	keyStringPattern = regexp.MustCompile(`(?s)<key>\s*([^<]+)\s*</key>\s*<string>\s*([^<]+)\s*</string>`)
+	dictPattern         = regexp.MustCompile(`(?s)<dict>(.*?)</dict>`)
+	keyStringPattern    = regexp.MustCompile(`(?s)<key>\s*([^<]+)\s*</key>\s*<string>\s*([^<]+)\s*</string>`)
+	rsyncPercentPattern = regexp.MustCompile(`\s+(\d+)%`)
 )
+
+func parseRsyncPercent(line string) (int, bool) {
+	m := rsyncPercentPattern.FindStringSubmatch(line)
+	if m == nil {
+		return -1, false
+	}
+	var pct int
+	fmt.Sscanf(m[1], "%d", &pct)
+	return pct, true
+}
 
 func CreateSparseBundle(r Runner, path, volName string, sizeGB int) error {
 	if r == nil {
@@ -95,6 +148,34 @@ func Detach(r Runner, device string) error {
 		r = execRunner{}
 	}
 	return run(r, "hdiutil", "detach", device)
+}
+
+func SyncBaseWithProgress(r Runner, src, dst string, onPercent func(int)) error {
+	if r == nil {
+		r = execRunner{}
+	}
+	src = ensureTrailingSlash(src)
+	dst = ensureTrailingSlash(dst)
+	args := []string{
+		"-a",
+		"--delete",
+		"--info=progress2",
+		"--no-inc-recursive",
+		"--exclude", ".grove/images/",
+		"--exclude", ".grove/workspaces/",
+		"--exclude", ".grove/shadows/",
+		"--exclude", ".grove/mnt/",
+		src,
+		dst,
+	}
+	return r.Stream("rsync", args, func(line string) {
+		if onPercent == nil {
+			return
+		}
+		if pct, ok := parseRsyncPercent(line); ok {
+			onPercent(pct)
+		}
+	})
 }
 
 func SyncBase(r Runner, src, dst string) error {

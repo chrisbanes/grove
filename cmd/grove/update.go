@@ -16,6 +16,13 @@ var updateCmd = &cobra.Command{
 	Short: "Pull latest and rebuild the golden copy",
 	Long:  `Convenience command to refresh the golden copy: git pull + warmup command.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		progressEnabled, _ := cmd.Flags().GetBool("progress")
+		var progress *progressRenderer
+		if progressEnabled {
+			progress = newProgressRenderer(os.Stderr, isTerminalFile(os.Stderr), "update")
+			defer progress.Done()
+		}
+
 		cwd, err := os.Getwd()
 		if err != nil {
 			return err
@@ -55,10 +62,16 @@ var updateCmd = &cobra.Command{
 		}
 
 		commit, _ := gitpkg.CurrentCommit(goldenRoot)
-		if backendImpl.Name() == "image" {
+		if backendImpl.Name() == "image" && progress == nil {
 			fmt.Println("Refreshing image backend...")
 		}
-		if err := backendImpl.RefreshBase(goldenRoot, commit); err != nil {
+		var onProgress func(int, string)
+		if progress != nil {
+			onProgress = func(pct int, phase string) {
+				progress.Update(pct, phase)
+			}
+		}
+		if err := backendImpl.RefreshBase(goldenRoot, commit, onProgress); err != nil {
 			return err
 		}
 		fmt.Printf("Golden copy updated to %s\n", commit)
@@ -67,5 +80,6 @@ var updateCmd = &cobra.Command{
 }
 
 func init() {
+	updateCmd.Flags().Bool("progress", false, "Show progress output during image backend refresh")
 	rootCmd.AddCommand(updateCmd)
 }
