@@ -111,7 +111,7 @@ Creates a .grove/ directory with config and optional hooks.`,
 					progress.Update(pct, phase)
 				}
 			}
-			if _, err := image.InitBase(absPath, nil, imageSizeGB, onProgress); err != nil {
+			if _, err := image.InitBase(absPath, nil, imageSizeGB, nil, onProgress); err != nil {
 				return fmt.Errorf("initializing image backend: %w", err)
 			}
 		}

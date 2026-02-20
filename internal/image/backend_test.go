@@ -25,7 +25,7 @@ func TestInitBase_CreatesStateAndRunsCommands(t *testing.T) {
 		},
 	}
 
-	st, err := InitBase(repoRoot, r, 20, nil)
+	st, err := InitBase(repoRoot, r, 20, nil, nil)
 	if err != nil {
 		t.Fatalf("InitBase() error = %v", err)
 	}
@@ -85,7 +85,7 @@ func TestInitBase_CallsOnProgress(t *testing.T) {
 		percents = append(percents, pct)
 	}
 
-	st, err := InitBase(repoRoot, r, 20, onProgress)
+	st, err := InitBase(repoRoot, r, 20, nil, onProgress)
 	if err != nil {
 		t.Fatalf("InitBase() error = %v", err)
 	}
@@ -153,7 +153,7 @@ func TestRefreshBase_CallsOnProgress(t *testing.T) {
 		percents = append(percents, pct)
 	}
 
-	_, err := RefreshBase(repoRoot, repoRoot, r, "abc1234", onProgress)
+	_, err := RefreshBase(repoRoot, repoRoot, r, "abc1234", nil, onProgress)
 	if err != nil {
 		t.Fatalf("RefreshBase() error = %v", err)
 	}
@@ -180,6 +180,93 @@ func TestRefreshBase_CallsOnProgress(t *testing.T) {
 	}
 }
 
+func TestInitBase_PassesExcludesToRsync(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	r := &fakeRunner{
+		outputs: [][]byte{
+			nil, // CreateSparseBundle
+			[]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>system-entities</key>
+  <array>
+    <dict><key>dev-entry</key><string>/dev/disk9</string></dict>
+    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, ".grove", "mnt", "base") + `</string></dict>
+  </array>
+</dict>
+</plist>`), // Attach
+		},
+	}
+
+	excludes := []string{"node_modules", "*.lock"}
+	_, err := InitBase(repoRoot, r, 20, excludes, nil)
+	if err != nil {
+		t.Fatalf("InitBase() error = %v", err)
+	}
+
+	// rsync is call index 2 (after hdiutil create, hdiutil attach)
+	if len(r.calls) < 3 {
+		t.Fatalf("expected at least 3 calls, got %d", len(r.calls))
+	}
+	rsyncCall := r.calls[2]
+	if rsyncCall.name != "rsync" {
+		t.Fatalf("expected call[2] to be rsync, got %q", rsyncCall.name)
+	}
+	argsStr := strings.Join(rsyncCall.args, " ")
+	if !strings.Contains(argsStr, "--exclude node_modules") {
+		t.Errorf("expected --exclude node_modules in rsync args: %s", argsStr)
+	}
+	if !strings.Contains(argsStr, "--exclude *.lock") {
+		t.Errorf("expected --exclude *.lock in rsync args: %s", argsStr)
+	}
+}
+
+func TestRefreshBase_PassesExcludesToRsync(t *testing.T) {
+	repoRoot := t.TempDir()
+	basePath := filepath.Join(repoRoot, ".grove", "images", "base.sparsebundle")
+	if err := SaveState(repoRoot, &State{
+		Backend:        "image",
+		BasePath:       basePath,
+		BaseGeneration: 1,
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	r := &fakeRunner{
+		outputs: [][]byte{
+			[]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>system-entities</key>
+  <array>
+    <dict><key>dev-entry</key><string>/dev/disk9</string></dict>
+    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, ".grove", "mnt", "base") + `</string></dict>
+  </array>
+</dict>
+</plist>`),
+		},
+	}
+
+	excludes := []string{"__pycache__"}
+	_, err := RefreshBase(repoRoot, repoRoot, r, "abc1234", excludes, nil)
+	if err != nil {
+		t.Fatalf("RefreshBase() error = %v", err)
+	}
+
+	if len(r.calls) < 2 {
+		t.Fatalf("expected at least 2 calls, got %d", len(r.calls))
+	}
+	rsyncCall := r.calls[1]
+	if rsyncCall.name != "rsync" {
+		t.Fatalf("expected call[1] to be rsync, got %q", rsyncCall.name)
+	}
+	argsStr := strings.Join(rsyncCall.args, " ")
+	if !strings.Contains(argsStr, "--exclude __pycache__") {
+		t.Errorf("expected --exclude __pycache__ in rsync args: %s", argsStr)
+	}
+}
+
 func TestRefreshBase_RefusesWhenWorkspacesExist(t *testing.T) {
 	repoRoot := t.TempDir()
 	if err := SaveState(repoRoot, &State{
@@ -199,7 +286,7 @@ func TestRefreshBase_RefusesWhenWorkspacesExist(t *testing.T) {
 	}
 
 	r := &fakeRunner{}
-	_, err := RefreshBase(repoRoot, repoRoot, r, "abc1234", nil)
+	_, err := RefreshBase(repoRoot, repoRoot, r, "abc1234", nil, nil)
 	if err == nil {
 		t.Fatal("expected refresh to fail with active workspaces")
 	}
@@ -237,7 +324,7 @@ func TestRefreshBase_UpdatesGenerationAndCommit(t *testing.T) {
 		},
 	}
 
-	updated, err := RefreshBase(repoRoot, repoRoot, r, "abc1234", nil)
+	updated, err := RefreshBase(repoRoot, repoRoot, r, "abc1234", nil, nil)
 	if err != nil {
 		t.Fatalf("RefreshBase() error = %v", err)
 	}
