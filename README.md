@@ -260,6 +260,13 @@ Grove stores its configuration in `.grove/config.json` inside the golden copy:
 | `exclude` | Glob patterns for files/directories to skip when cloning. See [Exclude Patterns](#exclude-patterns). | `[]` |
 | `clone_backend` | Workspace backend: `cp` (default) or `image` (experimental, macOS). | `cp` |
 
+## Backend Comparison
+
+| Backend | Pros | Cons | Best for |
+|---------|------|------|----------|
+| `cp` (default) | Simple and robust; no extra backend state; straightforward lifecycle and cleanup | Clone can be slower in very large repos with heavy metadata | Most repositories and teams that want predictable behavior |
+| `image` (experimental, macOS) | Very fast create via base image + per-workspace shadow; incremental base refresh with `grove update` | More operational complexity (mount/attach/detach state); macOS-specific; refresh/migration guarded while image workspaces are active | Very large repos where `cp -c -R` clone time is a bottleneck |
+
 ## Experimental Image Backend
 
 The `image` backend is for large repositories where raw `cp -c -R` clone time
