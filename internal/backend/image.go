@@ -65,8 +65,8 @@ func (imageBackend) DestroyWorkspace(goldenRoot string, cfg *config.Config, id s
 	return destroyWorkspace(goldenRoot, cfg, id)
 }
 
-func (imageBackend) RefreshBase(goldenRoot, commit string, onProgress func(int, string)) error {
-	if _, err := image.RefreshBase(goldenRoot, goldenRoot, nil, commit, nil, onProgress); err != nil {
+func (imageBackend) RefreshBase(goldenRoot, commit string, excludes []string, onProgress func(int, string)) error {
+	if _, err := image.RefreshBase(goldenRoot, goldenRoot, nil, commit, excludes, onProgress); err != nil {
 		return fmt.Errorf("image backend refresh failed: %w", err)
 	}
 	return nil

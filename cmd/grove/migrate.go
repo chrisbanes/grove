@@ -84,7 +84,7 @@ var migrateCmd = &cobra.Command{
 						progress.Update(pct, phase)
 					}
 				}
-				if _, err := image.InitBase(goldenRoot, nil, sizeGB, nil, onProgress); err != nil {
+				if _, err := image.InitBase(goldenRoot, nil, sizeGB, cfg.Exclude, onProgress); err != nil {
 					return fmt.Errorf("initializing image backend: %w", err)
 				}
 			}

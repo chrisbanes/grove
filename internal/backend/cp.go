@@ -30,6 +30,6 @@ func (cpBackend) DestroyWorkspace(goldenRoot string, cfg *config.Config, id stri
 	return destroyWorkspace(goldenRoot, cfg, id)
 }
 
-func (cpBackend) RefreshBase(_ string, _ string, _ func(int, string)) error {
+func (cpBackend) RefreshBase(_ string, _ string, _ []string, _ func(int, string)) error {
 	return nil
 }
