@@ -41,7 +41,7 @@ type progressRenderer struct {
 
 const progressPhaseVariable = "phase"
 
-func newProgressRenderer(w io.Writer, tty bool) *progressRenderer {
+func newProgressRenderer(w io.Writer, tty bool, label string) *progressRenderer {
 	r := &progressRenderer{
 		w:           w,
 		tty:         tty,
@@ -49,7 +49,7 @@ func newProgressRenderer(w io.Writer, tty bool) *progressRenderer {
 	}
 	if tty {
 		if _, ok := w.(*os.File); ok {
-			ctx, bar, err := newFancyProgress(w)
+			ctx, bar, err := newFancyProgress(w, label)
 			if err == nil {
 				r.ttyContext = ctx
 				r.ttyBar = bar
@@ -59,14 +59,14 @@ func newProgressRenderer(w io.Writer, tty bool) *progressRenderer {
 	return r
 }
 
-func newFancyProgress(w io.Writer) (ttyprogress.Context, ttyprogress.Bar, error) {
+func newFancyProgress(w io.Writer, label string) (ttyprogress.Context, ttyprogress.Bar, error) {
 	ctx := ttyprogress.For(w)
 	bar, err := ttyprogress.NewBar().
 		SetPredefined(10).
 		SetTotal(100).
 		SetWidth(ttyprogress.ReserveTerminalSize(45)).
 		PrependElapsed().
-		PrependMessage("create").
+		PrependMessage(label).
 		AppendCompleted().
 		AppendMessage("phase:").
 		AppendVariable(progressPhaseVariable).

@@ -40,7 +40,7 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 			progress.Update(percent, phase)
 		}
 		if progressEnabled {
-			progress = newProgressRenderer(os.Stderr, isTerminalFile(os.Stderr))
+			progress = newProgressRenderer(os.Stderr, isTerminalFile(os.Stderr), "create")
 			defer progress.Done()
 			cloneState = newProgressState(5, 95)
 			updateProgress(0, "preflight")
