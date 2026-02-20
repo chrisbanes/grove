@@ -67,9 +67,20 @@ type AttachedVolume struct {
 }
 
 var (
-	dictPattern      = regexp.MustCompile(`(?s)<dict>(.*?)</dict>`)
-	keyStringPattern = regexp.MustCompile(`(?s)<key>\s*([^<]+)\s*</key>\s*<string>\s*([^<]+)\s*</string>`)
+	dictPattern         = regexp.MustCompile(`(?s)<dict>(.*?)</dict>`)
+	keyStringPattern    = regexp.MustCompile(`(?s)<key>\s*([^<]+)\s*</key>\s*<string>\s*([^<]+)\s*</string>`)
+	rsyncPercentPattern = regexp.MustCompile(`\s+(\d+)%\s`)
 )
+
+func parseRsyncPercent(line string) (int, bool) {
+	m := rsyncPercentPattern.FindStringSubmatch(line)
+	if m == nil {
+		return -1, false
+	}
+	var pct int
+	fmt.Sscanf(m[1], "%d", &pct)
+	return pct, true
+}
 
 func CreateSparseBundle(r Runner, path, volName string, sizeGB int) error {
 	if r == nil {
@@ -136,6 +147,34 @@ func Detach(r Runner, device string) error {
 		r = execRunner{}
 	}
 	return run(r, "hdiutil", "detach", device)
+}
+
+func SyncBaseWithProgress(r Runner, src, dst string, onPercent func(int)) error {
+	if r == nil {
+		r = execRunner{}
+	}
+	src = ensureTrailingSlash(src)
+	dst = ensureTrailingSlash(dst)
+	args := []string{
+		"-a",
+		"--delete",
+		"--info=progress2",
+		"--no-inc-recursive",
+		"--exclude", ".grove/images/",
+		"--exclude", ".grove/workspaces/",
+		"--exclude", ".grove/shadows/",
+		"--exclude", ".grove/mnt/",
+		src,
+		dst,
+	}
+	return r.Stream("rsync", args, func(line string) {
+		if onPercent == nil {
+			return
+		}
+		if pct, ok := parseRsyncPercent(line); ok {
+			onPercent(pct)
+		}
+	})
 }
 
 func SyncBase(r Runner, src, dst string) error {

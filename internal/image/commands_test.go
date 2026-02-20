@@ -182,6 +182,78 @@ func TestCreateSparseBundle_PropagatesCommandError(t *testing.T) {
 	}
 }
 
+func TestParseRsyncPercent(t *testing.T) {
+	tests := []struct {
+		line string
+		want int
+		ok   bool
+	}{
+		{"    458,588,160   6%  109.38MB/s    0:01:02", 6, true},
+		{"  1,234,567,890  99%   50.00MB/s    0:00:01", 99, true},
+		{"              0   0%    0.00kB/s    0:00:00", 0, true},
+		{"  1,234,567,890 100%   50.00MB/s    0:00:01 (xfr#1, to-chk=0/100)", 100, true},
+		{"sending incremental file list", -1, false},
+		{"", -1, false},
+	}
+	for _, tt := range tests {
+		got, ok := parseRsyncPercent(tt.line)
+		if ok != tt.ok {
+			t.Errorf("parseRsyncPercent(%q) ok = %v, want %v", tt.line, ok, tt.ok)
+		}
+		if ok && got != tt.want {
+			t.Errorf("parseRsyncPercent(%q) = %d, want %d", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestSyncBaseWithProgress_CallsRsyncWithProgressFlags(t *testing.T) {
+	r := &fakeRunner{
+		streamLines: []string{
+			"sending incremental file list",
+			"    458,588,160   6%  109.38MB/s    0:01:02",
+			"  4,585,881,600  60%  109.38MB/s    0:01:02",
+			"  7,643,136,000 100%  109.38MB/s    0:01:02 (xfr#1, to-chk=0/100)",
+		},
+	}
+
+	var percents []int
+	onProgress := func(pct int) {
+		percents = append(percents, pct)
+	}
+
+	if err := SyncBaseWithProgress(r, "/src", "/dst", onProgress); err != nil {
+		t.Fatalf("SyncBaseWithProgress() error = %v", err)
+	}
+
+	if len(r.streamCalls) != 1 {
+		t.Fatalf("expected 1 stream call, got %d", len(r.streamCalls))
+	}
+	call := r.streamCalls[0]
+	if call.name != "rsync" {
+		t.Fatalf("expected rsync, got %q", call.name)
+	}
+	argsStr := strings.Join(call.args, " ")
+	if !strings.Contains(argsStr, "--info=progress2") {
+		t.Fatalf("expected --info=progress2 in args, got %v", call.args)
+	}
+	if !strings.Contains(argsStr, "--no-inc-recursive") {
+		t.Fatalf("expected --no-inc-recursive in args, got %v", call.args)
+	}
+
+	if len(percents) != 3 {
+		t.Fatalf("expected 3 progress callbacks, got %d: %v", len(percents), percents)
+	}
+	if percents[0] != 6 || percents[1] != 60 || percents[2] != 100 {
+		t.Fatalf("unexpected percents: %v", percents)
+	}
+}
+
+func TestSyncBaseWithProgress_NilRunnerUsesDefault(t *testing.T) {
+	// Just verifying it doesn't panic when runner is nil — will fail
+	// with a real rsync error since paths don't exist, which is fine.
+	_ = SyncBaseWithProgress(nil, "/nonexistent/src", "/nonexistent/dst", nil)
+}
+
 func TestExecRunner_StreamCallsOnLine(t *testing.T) {
 	r := execRunner{}
 	var lines []string
