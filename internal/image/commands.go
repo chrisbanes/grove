@@ -3,6 +3,7 @@ package image
 import (
 	"bufio"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -27,7 +28,7 @@ func (execRunner) Stream(name string, args []string, onLine func(string)) error 
 	if err != nil {
 		return err
 	}
-	cmd.Stderr = cmd.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -69,7 +70,7 @@ type AttachedVolume struct {
 var (
 	dictPattern         = regexp.MustCompile(`(?s)<dict>(.*?)</dict>`)
 	keyStringPattern    = regexp.MustCompile(`(?s)<key>\s*([^<]+)\s*</key>\s*<string>\s*([^<]+)\s*</string>`)
-	rsyncPercentPattern = regexp.MustCompile(`\s+(\d+)%\s`)
+	rsyncPercentPattern = regexp.MustCompile(`\s+(\d+)%`)
 )
 
 func parseRsyncPercent(line string) (int, bool) {
