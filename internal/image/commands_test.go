@@ -137,7 +137,16 @@ func TestSyncBase_UsesExpectedCommand(t *testing.T) {
 	if call.name != "rsync" {
 		t.Fatalf("expected rsync, got %q", call.name)
 	}
-	want := []string{"-a", "--delete", "--exclude", ".grove/", "/src/", "/dst/"}
+	want := []string{
+		"-a",
+		"--delete",
+		"--exclude", ".grove/images/",
+		"--exclude", ".grove/workspaces/",
+		"--exclude", ".grove/shadows/",
+		"--exclude", ".grove/mnt/",
+		"/src/",
+		"/dst/",
+	}
 	if strings.Join(call.args, " ") != strings.Join(want, " ") {
 		t.Fatalf("unexpected args\nwant: %v\ngot:  %v", want, call.args)
 	}
@@ -156,4 +165,3 @@ func TestCreateSparseBundle_PropagatesCommandError(t *testing.T) {
 		t.Fatalf("expected stderr/stdout in error, got %v", err)
 	}
 }
-

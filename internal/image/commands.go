@@ -103,7 +103,18 @@ func SyncBase(r Runner, src, dst string) error {
 	}
 	src = ensureTrailingSlash(src)
 	dst = ensureTrailingSlash(dst)
-	return run(r, "rsync", "-a", "--delete", "--exclude", ".grove/", src, dst)
+	return run(
+		r,
+		"rsync",
+		"-a",
+		"--delete",
+		"--exclude", ".grove/images/",
+		"--exclude", ".grove/workspaces/",
+		"--exclude", ".grove/shadows/",
+		"--exclude", ".grove/mnt/",
+		src,
+		dst,
+	)
 }
 
 func run(r Runner, name string, args ...string) error {

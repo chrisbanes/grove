@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/chrisbanes/grove/internal/config"
 	gitpkg "github.com/chrisbanes/grove/internal/git"
+	"github.com/chrisbanes/grove/internal/image"
 	"github.com/chrisbanes/grove/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -53,7 +55,7 @@ var destroyCmd = &cobra.Command{
 						continue
 					}
 				}
-				if err := workspace.Destroy(cfg, ws.ID); err != nil {
+				if err := destroyWorkspace(goldenRoot, cfg, ws.ID); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to destroy %s: %v\n", ws.ID, err)
 					continue
 				}
@@ -67,21 +69,34 @@ var destroyCmd = &cobra.Command{
 		}
 
 		idOrPath := args[0]
+		info, err := workspace.Get(cfg, idOrPath)
+		if err != nil {
+			return err
+		}
+
 		if push {
-			info, err := workspace.Get(cfg, idOrPath)
-			if err == nil && info.Branch != "" {
+			if info.Branch != "" {
 				if err := gitpkg.Push(info.Path, info.Branch); err != nil {
 					return fmt.Errorf("push failed for %s (%s): %w", info.ID, info.Branch, err)
 				}
 			}
 		}
 
-		if err := workspace.Destroy(cfg, idOrPath); err != nil {
+		if err := destroyWorkspace(goldenRoot, cfg, info.ID); err != nil {
 			return err
 		}
-		fmt.Printf("Destroyed: %s\n", idOrPath)
+		fmt.Printf("Destroyed: %s\n", info.ID)
 		return nil
 	},
+}
+
+func destroyWorkspace(goldenRoot string, cfg *config.Config, id string) error {
+	if _, err := image.LoadWorkspaceMeta(goldenRoot, id); err == nil {
+		return image.DestroyWorkspace(goldenRoot, id, nil)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return workspace.Destroy(cfg, id)
 }
 
 func init() {

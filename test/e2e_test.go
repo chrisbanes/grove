@@ -249,6 +249,40 @@ func TestFullLifecycle(t *testing.T) {
 	}
 }
 
+func TestImageBackendLifecycle(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("image backend tests only run on macOS")
+	}
+
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+
+	// Initialize with the experimental image backend.
+	grove(t, binary, repo, "init", "--backend", "image", "--image-size-gb", "5")
+
+	// Create workspace and validate marker + metadata.
+	out := grove(t, binary, repo, "create", "--json")
+	var info workspace.Info
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		t.Fatalf("invalid JSON output: %s\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(info.Path, ".grove", config.WorkspaceFile)); err != nil {
+		t.Fatalf("expected workspace marker: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".grove", "workspaces", info.ID+".json")); err != nil {
+		t.Fatalf("expected image workspace metadata: %v", err)
+	}
+
+	// Destroy should detach and clean workspace metadata.
+	grove(t, binary, repo, "destroy", info.ID)
+	if _, err := os.Stat(info.Path); !os.IsNotExist(err) {
+		t.Fatalf("expected workspace path removed, got err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".grove", "workspaces", info.ID+".json")); !os.IsNotExist(err) {
+		t.Fatalf("expected image workspace metadata removed, got err=%v", err)
+	}
+}
+
 func TestPostCloneHook(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("APFS tests only run on macOS")
