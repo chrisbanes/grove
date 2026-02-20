@@ -63,6 +63,9 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.MaxWorkspaces != 10 {
 		t.Errorf("expected default max_workspaces 10, got %d", cfg.MaxWorkspaces)
 	}
+	if cfg.CloneBackend != "cp" {
+		t.Errorf("expected default clone_backend cp, got %q", cfg.CloneBackend)
+	}
 }
 
 func TestLoad_NotInitialized(t *testing.T) {
@@ -163,5 +166,38 @@ func TestLoad_EmptyExclude(t *testing.T) {
 	}
 	if cfg.Exclude != nil {
 		t.Errorf("expected nil exclude, got %v", cfg.Exclude)
+	}
+}
+
+func TestLoad_CloneBackendImage(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+	os.WriteFile(
+		filepath.Join(dir, ".grove", "config.json"),
+		[]byte(`{"workspace_dir": "/tmp/test", "clone_backend": "image"}`),
+		0644,
+	)
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CloneBackend != "image" {
+		t.Errorf("expected clone_backend image, got %q", cfg.CloneBackend)
+	}
+}
+
+func TestLoad_InvalidCloneBackend(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+	os.WriteFile(
+		filepath.Join(dir, ".grove", "config.json"),
+		[]byte(`{"workspace_dir": "/tmp/test", "clone_backend": "bad"}`),
+		0644,
+	)
+
+	_, err := config.Load(dir)
+	if err == nil {
+		t.Error("expected error for invalid clone backend")
 	}
 }

@@ -20,6 +20,7 @@ type Config struct {
 	WorkspaceDir  string   `json:"workspace_dir"`
 	MaxWorkspaces int      `json:"max_workspaces"`
 	Exclude       []string `json:"exclude,omitempty"`
+	CloneBackend  string   `json:"clone_backend,omitempty"`
 }
 
 func DefaultConfig(projectName string) *Config {
@@ -47,7 +48,24 @@ func Load(repoRoot string) (*Config, error) {
 	if cfg.MaxWorkspaces == 0 {
 		cfg.MaxWorkspaces = 10
 	}
+	backend, err := normalizeCloneBackend(cfg.CloneBackend)
+	if err != nil {
+		return nil, err
+	}
+	cfg.CloneBackend = backend
 	return &cfg, nil
+}
+
+func normalizeCloneBackend(value string) (string, error) {
+	if value == "" {
+		return "cp", nil
+	}
+	switch value {
+	case "cp", "image":
+		return value, nil
+	default:
+		return "", fmt.Errorf("invalid clone_backend %q: expected cp or image", value)
+	}
 }
 
 func Save(repoRoot string, cfg *Config) error {
