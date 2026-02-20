@@ -1,6 +1,7 @@
 package image
 
 import (
+	"bufio"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -10,6 +11,7 @@ import (
 // Runner executes external commands.
 type Runner interface {
 	CombinedOutput(name string, args ...string) ([]byte, error)
+	Stream(name string, args []string, onLine func(string)) error
 }
 
 type execRunner struct{}
@@ -17,6 +19,45 @@ type execRunner struct{}
 func (execRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 	cmd := exec.Command(name, args...)
 	return cmd.CombinedOutput()
+}
+
+func (execRunner) Stream(name string, args []string, onLine func(string)) error {
+	cmd := exec.Command(name, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	cmd.Stderr = cmd.Stdout
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	scanner.Split(scanCRLF)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			onLine(line)
+		}
+	}
+	return cmd.Wait()
+}
+
+// scanCRLF is a bufio.SplitFunc that splits on both \r and \n.
+// This is needed for rsync --info=progress2 which uses \r to overwrite lines.
+func scanCRLF(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	for i, b := range data {
+		if b == '\n' || b == '\r' {
+			return i + 1, data[:i], nil
+		}
+	}
+	if atEOF {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
 }
 
 // AttachedVolume describes an attached disk image volume.

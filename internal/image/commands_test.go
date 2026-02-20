@@ -11,10 +11,18 @@ type runnerCall struct {
 	args []string
 }
 
+type streamCall struct {
+	name string
+	args []string
+}
+
 type fakeRunner struct {
-	calls   []runnerCall
-	outputs [][]byte
-	errs    []error
+	calls       []runnerCall
+	outputs     [][]byte
+	errs        []error
+	streamCalls []streamCall
+	streamLines []string
+	streamErr   error
 }
 
 func (f *fakeRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
@@ -30,6 +38,14 @@ func (f *fakeRunner) CombinedOutput(name string, args ...string) ([]byte, error)
 		f.errs = f.errs[1:]
 	}
 	return out, err
+}
+
+func (f *fakeRunner) Stream(name string, args []string, onLine func(string)) error {
+	f.streamCalls = append(f.streamCalls, streamCall{name: name, args: append([]string(nil), args...)})
+	for _, line := range f.streamLines {
+		onLine(line)
+	}
+	return f.streamErr
 }
 
 func TestCreateSparseBundle_UsesExpectedCommand(t *testing.T) {
@@ -163,5 +179,22 @@ func TestCreateSparseBundle_PropagatesCommandError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("expected stderr/stdout in error, got %v", err)
+	}
+}
+
+func TestExecRunner_StreamCallsOnLine(t *testing.T) {
+	r := execRunner{}
+	var lines []string
+	err := r.Stream("echo", []string{"hello"}, func(line string) {
+		lines = append(lines, line)
+	})
+	if err != nil {
+		t.Fatalf("Stream() error = %v", err)
+	}
+	if len(lines) == 0 {
+		t.Fatal("expected at least one line from echo")
+	}
+	if lines[0] != "hello" {
+		t.Fatalf("expected 'hello', got %q", lines[0])
 	}
 }
