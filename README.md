@@ -262,10 +262,15 @@ Grove stores its configuration in `.grove/config.json` inside the golden copy:
 
 ## Backend Comparison
 
-| Backend | Pros | Cons | Best for |
-|---------|------|------|----------|
-| `cp` (default) | Simple and robust; no extra backend state; straightforward lifecycle and cleanup | Clone can be slower in very large repos with heavy metadata | Most repositories and teams that want predictable behavior |
-| `image` (experimental, macOS) | Very fast create via base image + per-workspace shadow; incremental base refresh with `grove update` | More operational complexity (mount/attach/detach state); higher disk usage (base image + shadows can approach ~2x in worst case); macOS-specific; refresh/migration guarded while image workspaces are active | Very large repos where `cp -c -R` clone time is a bottleneck |
+| Characteristic | `cp` (default) | `image` (experimental, macOS) |
+|----------------|----------------|--------------------------------|
+| Create speed | Fast APFS clone via `cp -c -R`; can become metadata-bound in very large repos | Very fast create via base image attach + per-workspace shadow |
+| Disk space | CoW shared blocks with low operational overhead | Higher overhead from base image + shadows; can approach ~2x in worst case |
+| Operational complexity | Simple lifecycle, no extra backend state | More complex mount/attach/detach state and metadata handling |
+| Update behavior | `grove update` does git pull + optional warmup | Adds incremental base image refresh during `grove update` |
+| Safety constraints | Fewer backend-specific guards | Refresh/migration guarded while image-backed workspaces are active |
+| Platform support | macOS/APFS | macOS-only and still experimental |
+| Best for | Most repositories and teams prioritizing predictability | Very large repos where `cp -c -R` clone time is the bottleneck |
 
 ## Experimental Image Backend
 
