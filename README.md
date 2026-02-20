@@ -265,7 +265,7 @@ Grove stores its configuration in `.grove/config.json` inside the golden copy:
 | Backend | Pros | Cons | Best for |
 |---------|------|------|----------|
 | `cp` (default) | Simple and robust; no extra backend state; straightforward lifecycle and cleanup | Clone can be slower in very large repos with heavy metadata | Most repositories and teams that want predictable behavior |
-| `image` (experimental, macOS) | Very fast create via base image + per-workspace shadow; incremental base refresh with `grove update` | More operational complexity (mount/attach/detach state); macOS-specific; refresh/migration guarded while image workspaces are active | Very large repos where `cp -c -R` clone time is a bottleneck |
+| `image` (experimental, macOS) | Very fast create via base image + per-workspace shadow; incremental base refresh with `grove update` | More operational complexity (mount/attach/detach state); higher disk usage (base image + shadows can approach ~2x in worst case); macOS-specific; refresh/migration guarded while image workspaces are active | Very large repos where `cp -c -R` clone time is a bottleneck |
 
 ## Experimental Image Backend
 
