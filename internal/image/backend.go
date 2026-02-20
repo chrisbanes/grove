@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-func InitBase(repoRoot string, runner Runner, baseSizeGB int, onProgress func(int, string)) (_ *State, err error) {
+func InitBase(repoRoot string, runner Runner, baseSizeGB int, excludes []string, onProgress func(int, string)) (_ *State, err error) {
 	if baseSizeGB <= 0 {
 		baseSizeGB = 20
 	}
@@ -38,11 +38,11 @@ func InitBase(repoRoot string, runner Runner, baseSizeGB int, onProgress func(in
 
 	if onProgress != nil {
 		onProgress(5, "syncing golden copy")
-		err = SyncBaseWithProgress(runner, repoRoot, vol.MountPoint, func(pct int) {
+		err = SyncBaseWithProgress(runner, repoRoot, vol.MountPoint, excludes, func(pct int) {
 			onProgress(mapPercent(pct, 100, 5, 95), "syncing golden copy")
 		})
 	} else {
-		err = SyncBase(runner, repoRoot, vol.MountPoint)
+		err = SyncBase(runner, repoRoot, vol.MountPoint, excludes)
 	}
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func InitBase(repoRoot string, runner Runner, baseSizeGB int, onProgress func(in
 	return st, nil
 }
 
-func RefreshBase(repoRoot, goldenRoot string, runner Runner, commit string, onProgress func(int, string)) (_ *State, err error) {
+func RefreshBase(repoRoot, goldenRoot string, runner Runner, commit string, excludes []string, onProgress func(int, string)) (_ *State, err error) {
 	metas, err := ListWorkspaceMeta(repoRoot)
 	if err != nil {
 		return nil, err
@@ -95,11 +95,11 @@ func RefreshBase(repoRoot, goldenRoot string, runner Runner, commit string, onPr
 
 	if onProgress != nil {
 		onProgress(5, "syncing golden copy")
-		err = SyncBaseWithProgress(runner, goldenRoot, vol.MountPoint, func(pct int) {
+		err = SyncBaseWithProgress(runner, goldenRoot, vol.MountPoint, excludes, func(pct int) {
 			onProgress(mapPercent(pct, 100, 5, 95), "syncing golden copy")
 		})
 	} else {
-		err = SyncBase(runner, goldenRoot, vol.MountPoint)
+		err = SyncBase(runner, goldenRoot, vol.MountPoint, excludes)
 	}
 	if err != nil {
 		return nil, err

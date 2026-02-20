@@ -142,7 +142,7 @@ func TestDetach_UsesExpectedCommand(t *testing.T) {
 
 func TestSyncBase_UsesExpectedCommand(t *testing.T) {
 	r := &fakeRunner{}
-	if err := SyncBase(r, "/src", "/dst"); err != nil {
+	if err := SyncBase(r, "/src", "/dst", nil); err != nil {
 		t.Fatalf("SyncBase() error = %v", err)
 	}
 
@@ -221,7 +221,7 @@ func TestSyncBaseWithProgress_CallsRsyncWithProgressFlags(t *testing.T) {
 		percents = append(percents, pct)
 	}
 
-	if err := SyncBaseWithProgress(r, "/src", "/dst", onProgress); err != nil {
+	if err := SyncBaseWithProgress(r, "/src", "/dst", nil, onProgress); err != nil {
 		t.Fatalf("SyncBaseWithProgress() error = %v", err)
 	}
 
@@ -251,7 +251,78 @@ func TestSyncBaseWithProgress_CallsRsyncWithProgressFlags(t *testing.T) {
 func TestSyncBaseWithProgress_NilRunnerUsesDefault(t *testing.T) {
 	// Just verifying it doesn't panic when runner is nil — will fail
 	// with a real rsync error since paths don't exist, which is fine.
-	_ = SyncBaseWithProgress(nil, "/nonexistent/src", "/nonexistent/dst", nil)
+	_ = SyncBaseWithProgress(nil, "/nonexistent/src", "/nonexistent/dst", nil, nil)
+}
+
+func TestSyncBase_WithExcludes(t *testing.T) {
+	r := &fakeRunner{}
+	if err := SyncBase(r, "/src", "/dst", []string{"node_modules", "*.lock"}); err != nil {
+		t.Fatalf("SyncBase() error = %v", err)
+	}
+
+	if len(r.calls) != 1 {
+		t.Fatalf("expected 1 command call, got %d", len(r.calls))
+	}
+	call := r.calls[0]
+	if call.name != "rsync" {
+		t.Fatalf("expected rsync, got %q", call.name)
+	}
+	want := []string{
+		"-a",
+		"--delete",
+		"--exclude", ".grove/images/",
+		"--exclude", ".grove/workspaces/",
+		"--exclude", ".grove/shadows/",
+		"--exclude", ".grove/mnt/",
+		"--exclude", "node_modules",
+		"--exclude", "*.lock",
+		"/src/",
+		"/dst/",
+	}
+	if strings.Join(call.args, " ") != strings.Join(want, " ") {
+		t.Fatalf("unexpected args\nwant: %v\ngot:  %v", want, call.args)
+	}
+}
+
+func TestSyncBaseWithProgress_WithExcludes(t *testing.T) {
+	r := &fakeRunner{
+		streamLines: []string{
+			"  7,643,136,000 100%  109.38MB/s    0:01:02 (xfr#1, to-chk=0/100)",
+		},
+	}
+
+	if err := SyncBaseWithProgress(r, "/src", "/dst", []string{"__pycache__"}, nil); err != nil {
+		t.Fatalf("SyncBaseWithProgress() error = %v", err)
+	}
+
+	if len(r.streamCalls) != 1 {
+		t.Fatalf("expected 1 stream call, got %d", len(r.streamCalls))
+	}
+	argsStr := strings.Join(r.streamCalls[0].args, " ")
+	if !strings.Contains(argsStr, "--exclude __pycache__") {
+		t.Fatalf("expected user exclude in args, got %v", r.streamCalls[0].args)
+	}
+}
+
+func TestSyncBase_NilExcludes(t *testing.T) {
+	r := &fakeRunner{}
+	if err := SyncBase(r, "/src", "/dst", nil); err != nil {
+		t.Fatalf("SyncBase() error = %v", err)
+	}
+	call := r.calls[0]
+	want := []string{
+		"-a",
+		"--delete",
+		"--exclude", ".grove/images/",
+		"--exclude", ".grove/workspaces/",
+		"--exclude", ".grove/shadows/",
+		"--exclude", ".grove/mnt/",
+		"/src/",
+		"/dst/",
+	}
+	if strings.Join(call.args, " ") != strings.Join(want, " ") {
+		t.Fatalf("unexpected args\nwant: %v\ngot:  %v", want, call.args)
+	}
 }
 
 func TestExecRunner_StreamCallsOnLine(t *testing.T) {

@@ -150,7 +150,7 @@ func Detach(r Runner, device string) error {
 	return run(r, "hdiutil", "detach", device)
 }
 
-func SyncBaseWithProgress(r Runner, src, dst string, onPercent func(int)) error {
+func SyncBaseWithProgress(r Runner, src, dst string, excludes []string, onPercent func(int)) error {
 	if r == nil {
 		r = execRunner{}
 	}
@@ -165,9 +165,11 @@ func SyncBaseWithProgress(r Runner, src, dst string, onPercent func(int)) error 
 		"--exclude", ".grove/workspaces/",
 		"--exclude", ".grove/shadows/",
 		"--exclude", ".grove/mnt/",
-		src,
-		dst,
 	}
+	for _, pattern := range excludes {
+		args = append(args, "--exclude", pattern)
+	}
+	args = append(args, src, dst)
 	return r.Stream("rsync", args, func(line string) {
 		if onPercent == nil {
 			return
@@ -178,24 +180,25 @@ func SyncBaseWithProgress(r Runner, src, dst string, onPercent func(int)) error 
 	})
 }
 
-func SyncBase(r Runner, src, dst string) error {
+func SyncBase(r Runner, src, dst string, excludes []string) error {
 	if r == nil {
 		r = execRunner{}
 	}
 	src = ensureTrailingSlash(src)
 	dst = ensureTrailingSlash(dst)
-	return run(
-		r,
-		"rsync",
+	args := []string{
 		"-a",
 		"--delete",
 		"--exclude", ".grove/images/",
 		"--exclude", ".grove/workspaces/",
 		"--exclude", ".grove/shadows/",
 		"--exclude", ".grove/mnt/",
-		src,
-		dst,
-	)
+	}
+	for _, pattern := range excludes {
+		args = append(args, "--exclude", pattern)
+	}
+	args = append(args, src, dst)
+	return run(r, "rsync", args...)
 }
 
 func run(r Runner, name string, args ...string) error {

@@ -71,7 +71,7 @@ var updateCmd = &cobra.Command{
 				progress.Update(pct, phase)
 			}
 		}
-		if err := backendImpl.RefreshBase(goldenRoot, commit, onProgress); err != nil {
+		if err := backendImpl.RefreshBase(goldenRoot, commit, cfg.Exclude, onProgress); err != nil {
 			return err
 		}
 		fmt.Printf("Golden copy updated to %s\n", commit)
