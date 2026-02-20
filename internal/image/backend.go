@@ -38,11 +38,11 @@ func InitBase(repoRoot string, runner Runner, baseSizeGB int, onProgress func(in
 
 	if onProgress != nil {
 		onProgress(5, "syncing golden copy")
-		err = SyncBaseWithProgress(runner, repoRoot, vol.MountPoint, func(pct int) {
+		err = SyncBaseWithProgress(runner, repoRoot, vol.MountPoint, nil, func(pct int) {
 			onProgress(mapPercent(pct, 100, 5, 95), "syncing golden copy")
 		})
 	} else {
-		err = SyncBase(runner, repoRoot, vol.MountPoint)
+		err = SyncBase(runner, repoRoot, vol.MountPoint, nil)
 	}
 	if err != nil {
 		return nil, err
@@ -95,11 +95,11 @@ func RefreshBase(repoRoot, goldenRoot string, runner Runner, commit string, onPr
 
 	if onProgress != nil {
 		onProgress(5, "syncing golden copy")
-		err = SyncBaseWithProgress(runner, goldenRoot, vol.MountPoint, func(pct int) {
+		err = SyncBaseWithProgress(runner, goldenRoot, vol.MountPoint, nil, func(pct int) {
 			onProgress(mapPercent(pct, 100, 5, 95), "syncing golden copy")
 		})
 	} else {
-		err = SyncBase(runner, goldenRoot, vol.MountPoint)
+		err = SyncBase(runner, goldenRoot, vol.MountPoint, nil)
 	}
 	if err != nil {
 		return nil, err
