@@ -30,6 +30,9 @@ var updateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if err := config.EnsureBackendCompatible(goldenRoot, cfg); err != nil {
+			return err
+		}
 
 		fmt.Println("Pulling latest...")
 		if err := gitpkg.Pull(goldenRoot); err != nil {

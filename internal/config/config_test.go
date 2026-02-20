@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/chrisbanes/grove/internal/config"
@@ -199,5 +200,78 @@ func TestLoad_InvalidCloneBackend(t *testing.T) {
 	_, err := config.Load(dir)
 	if err == nil {
 		t.Error("expected error for invalid clone backend")
+	}
+}
+
+func TestEnsureBackendCompatible_SeedsCPState(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+	os.WriteFile(
+		filepath.Join(dir, ".grove", "config.json"),
+		[]byte(`{"workspace_dir": "/tmp/test", "clone_backend": "cp"}`),
+		0644,
+	)
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := config.EnsureBackendCompatible(dir, cfg); err != nil {
+		t.Fatalf("EnsureBackendCompatible() error = %v", err)
+	}
+
+	backend, err := config.LoadBackendState(dir)
+	if err != nil {
+		t.Fatalf("LoadBackendState() error = %v", err)
+	}
+	if backend != "cp" {
+		t.Fatalf("expected backend state cp, got %q", backend)
+	}
+}
+
+func TestEnsureBackendCompatible_ImageWithoutStateErrors(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+	os.WriteFile(
+		filepath.Join(dir, ".grove", "config.json"),
+		[]byte(`{"workspace_dir": "/tmp/test", "clone_backend": "image"}`),
+		0644,
+	)
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = config.EnsureBackendCompatible(dir, cfg)
+	if err == nil {
+		t.Fatal("expected error when image backend has not been initialized")
+	}
+	if !strings.Contains(err.Error(), "grove migrate --to image") {
+		t.Fatalf("expected migrate guidance in error, got: %v", err)
+	}
+}
+
+func TestEnsureBackendCompatible_MismatchErrors(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+	os.WriteFile(
+		filepath.Join(dir, ".grove", "config.json"),
+		[]byte(`{"workspace_dir": "/tmp/test", "clone_backend": "image"}`),
+		0644,
+	)
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := config.SaveBackendState(dir, "cp"); err != nil {
+		t.Fatalf("SaveBackendState() error = %v", err)
+	}
+	err = config.EnsureBackendCompatible(dir, cfg)
+	if err == nil {
+		t.Fatal("expected mismatch error")
+	}
+	if !strings.Contains(err.Error(), "grove migrate --to image") {
+		t.Fatalf("expected migrate guidance in error, got: %v", err)
 	}
 }

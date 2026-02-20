@@ -100,6 +100,9 @@ Creates a .grove/ directory with config and optional hooks.`,
 				return fmt.Errorf("initializing image backend: %w", err)
 			}
 		}
+		if err := config.SaveBackendState(absPath, cfg.CloneBackend); err != nil {
+			return fmt.Errorf("saving backend state: %w", err)
+		}
 
 		fmt.Printf("Grove initialized at %s\n", absPath)
 		fmt.Printf("Workspace dir: %s\n", config.ExpandWorkspaceDir(cfg.WorkspaceDir, projectName))

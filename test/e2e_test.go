@@ -283,6 +283,81 @@ func TestImageBackendLifecycle(t *testing.T) {
 	}
 }
 
+func TestBackendMismatchRequiresMigration(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+	grove(t, binary, repo, "init")
+
+	cfgPath := filepath.Join(repo, ".grove", "config.json")
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+	cfg["clone_backend"] = "image"
+	patched, _ := json.MarshalIndent(cfg, "", "  ")
+	if err := os.WriteFile(cfgPath, patched, 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	createErr := groveExpectErr(t, binary, repo, "create")
+	if !strings.Contains(createErr, "grove migrate --to image") {
+		t.Fatalf("expected migrate guidance from create, got: %s", createErr)
+	}
+
+	updateErr := groveExpectErr(t, binary, repo, "update")
+	if !strings.Contains(updateErr, "grove migrate --to image") {
+		t.Fatalf("expected migrate guidance from update, got: %s", updateErr)
+	}
+}
+
+func TestMigrateCommand(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+	grove(t, binary, repo, "init")
+
+	// cp -> image
+	out := grove(t, binary, repo, "migrate", "--to", "image", "--image-size-gb", "5")
+	if !strings.Contains(out, "Migrated backend to image") {
+		t.Fatalf("expected migrate success message, got: %s", out)
+	}
+
+	created := grove(t, binary, repo, "create", "--json")
+	var ws workspace.Info
+	if err := json.Unmarshal([]byte(created), &ws); err != nil {
+		t.Fatalf("invalid create JSON: %v\n%s", err, created)
+	}
+
+	// migrating back should fail while image workspace is active
+	errOut := groveExpectErr(t, binary, repo, "migrate", "--to", "cp")
+	if !strings.Contains(errOut, "active image workspaces") {
+		t.Fatalf("expected active workspace guard, got: %s", errOut)
+	}
+
+	grove(t, binary, repo, "destroy", ws.ID)
+
+	// image -> cp
+	out = grove(t, binary, repo, "migrate", "--to", "cp")
+	if !strings.Contains(out, "Migrated backend to cp") {
+		t.Fatalf("expected migrate success message, got: %s", out)
+	}
+
+	// cp create path should still work.
+	grove(t, binary, repo, "create")
+	grove(t, binary, repo, "destroy", "--all")
+}
+
 func TestPostCloneHook(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("APFS tests only run on macOS")

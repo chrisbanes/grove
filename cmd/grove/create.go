@@ -66,6 +66,9 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 		if err != nil {
 			return err
 		}
+		if err := config.EnsureBackendCompatible(goldenRoot, cfg); err != nil {
+			return err
+		}
 
 		// Expand workspace dir
 		projectName := getProjectName(goldenRoot)
