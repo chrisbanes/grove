@@ -7,6 +7,7 @@ import (
 
 	"github.com/chrisbanes/grove/internal/config"
 	gitpkg "github.com/chrisbanes/grove/internal/git"
+	"github.com/chrisbanes/grove/internal/image"
 	"github.com/spf13/cobra"
 )
 
@@ -47,6 +48,12 @@ var updateCmd = &cobra.Command{
 		}
 
 		commit, _ := gitpkg.CurrentCommit(goldenRoot)
+		if cfg.CloneBackend == "image" {
+			fmt.Println("Refreshing image backend...")
+			if _, err := image.RefreshBase(goldenRoot, goldenRoot, nil, commit); err != nil {
+				return fmt.Errorf("image backend refresh failed: %w", err)
+			}
+		}
 		fmt.Printf("Golden copy updated to %s\n", commit)
 		return nil
 	},

@@ -68,6 +68,28 @@ func AttachWithShadow(r Runner, basePath, shadowPath, mountPoint string) (*Attac
 	return vol, nil
 }
 
+func Attach(r Runner, basePath, mountPoint string) (*AttachedVolume, error) {
+	if r == nil {
+		r = execRunner{}
+	}
+	args := []string{
+		"attach",
+		basePath,
+		"-mountpoint", mountPoint,
+		"-nobrowse",
+		"-plist",
+	}
+	out, err := r.CombinedOutput("hdiutil", args...)
+	if err != nil {
+		return nil, fmt.Errorf("hdiutil attach failed: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	vol, err := parseAttachedVolume(out)
+	if err != nil {
+		return nil, fmt.Errorf("parse attach output: %w", err)
+	}
+	return vol, nil
+}
+
 func Detach(r Runner, device string) error {
 	if r == nil {
 		r = execRunner{}
@@ -117,4 +139,3 @@ func parseAttachedVolume(plist []byte) (*AttachedVolume, error) {
 	}
 	return nil, fmt.Errorf("missing dev-entry or mount-point in attach plist")
 }
-
