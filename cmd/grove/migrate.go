@@ -69,7 +69,7 @@ var migrateCmd = &cobra.Command{
 				}
 				sizeGB, _ := cmd.Flags().GetInt("image-size-gb")
 				fmt.Println("Initializing image backend...")
-				if _, err := image.InitBase(goldenRoot, nil, sizeGB); err != nil {
+				if _, err := image.InitBase(goldenRoot, nil, sizeGB, nil); err != nil {
 					return fmt.Errorf("initializing image backend: %w", err)
 				}
 			}

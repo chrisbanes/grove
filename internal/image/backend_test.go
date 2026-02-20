@@ -25,7 +25,7 @@ func TestInitBase_CreatesStateAndRunsCommands(t *testing.T) {
 		},
 	}
 
-	st, err := InitBase(repoRoot, r, 20)
+	st, err := InitBase(repoRoot, r, 20, nil)
 	if err != nil {
 		t.Fatalf("InitBase() error = %v", err)
 	}
@@ -74,7 +74,7 @@ func TestRefreshBase_RefusesWhenWorkspacesExist(t *testing.T) {
 	}
 
 	r := &fakeRunner{}
-	_, err := RefreshBase(repoRoot, repoRoot, r, "abc1234")
+	_, err := RefreshBase(repoRoot, repoRoot, r, "abc1234", nil)
 	if err == nil {
 		t.Fatal("expected refresh to fail with active workspaces")
 	}
@@ -112,7 +112,7 @@ func TestRefreshBase_UpdatesGenerationAndCommit(t *testing.T) {
 		},
 	}
 
-	updated, err := RefreshBase(repoRoot, repoRoot, r, "abc1234")
+	updated, err := RefreshBase(repoRoot, repoRoot, r, "abc1234", nil)
 	if err != nil {
 		t.Fatalf("RefreshBase() error = %v", err)
 	}

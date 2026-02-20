@@ -96,7 +96,7 @@ Creates a .grove/ directory with config and optional hooks.`,
 		if cfg.CloneBackend == "image" {
 			imageSizeGB, _ := cmd.Flags().GetInt("image-size-gb")
 			fmt.Println("Initializing image backend...")
-			if _, err := image.InitBase(absPath, nil, imageSizeGB); err != nil {
+			if _, err := image.InitBase(absPath, nil, imageSizeGB, nil); err != nil {
 				return fmt.Errorf("initializing image backend: %w", err)
 			}
 		}

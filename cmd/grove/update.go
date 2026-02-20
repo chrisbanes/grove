@@ -58,7 +58,7 @@ var updateCmd = &cobra.Command{
 		if backendImpl.Name() == "image" {
 			fmt.Println("Refreshing image backend...")
 		}
-		if err := backendImpl.RefreshBase(goldenRoot, commit); err != nil {
+		if err := backendImpl.RefreshBase(goldenRoot, commit, nil); err != nil {
 			return err
 		}
 		fmt.Printf("Golden copy updated to %s\n", commit)
