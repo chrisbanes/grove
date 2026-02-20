@@ -19,6 +19,13 @@ var initCmd = &cobra.Command{
 Creates a .grove/ directory with config and optional hooks.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		progressEnabled, _ := cmd.Flags().GetBool("progress")
+		var progress *progressRenderer
+		if progressEnabled {
+			progress = newProgressRenderer(os.Stderr, isTerminalFile(os.Stderr), "init")
+			defer progress.Done()
+		}
+
 		path := "."
 		if len(args) > 0 {
 			path = args[0]
@@ -95,8 +102,16 @@ Creates a .grove/ directory with config and optional hooks.`,
 
 		if cfg.CloneBackend == "image" {
 			imageSizeGB, _ := cmd.Flags().GetInt("image-size-gb")
-			fmt.Println("Initializing image backend...")
-			if _, err := image.InitBase(absPath, nil, imageSizeGB, nil); err != nil {
+			if progress == nil {
+				fmt.Println("Initializing image backend...")
+			}
+			var onProgress func(int, string)
+			if progress != nil {
+				onProgress = func(pct int, phase string) {
+					progress.Update(pct, phase)
+				}
+			}
+			if _, err := image.InitBase(absPath, nil, imageSizeGB, onProgress); err != nil {
 				return fmt.Errorf("initializing image backend: %w", err)
 			}
 		}
@@ -116,5 +131,6 @@ func init() {
 	initCmd.Flags().String("backend", "cp", "Workspace backend: cp or image (experimental)")
 	initCmd.Flags().Int("image-size-gb", 200, "Base sparsebundle size in GB when using --backend image")
 	initCmd.Flags().Bool("force", false, "Proceed even if golden copy has uncommitted changes")
+	initCmd.Flags().Bool("progress", false, "Show progress output during image backend initialization")
 	rootCmd.AddCommand(initCmd)
 }
