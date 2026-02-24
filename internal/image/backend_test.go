@@ -20,14 +20,14 @@ func TestInitBase_CreatesStateAndRunsCommands(t *testing.T) {
   <key>system-entities</key>
   <array>
     <dict><key>dev-entry</key><string>/dev/disk9</string></dict>
-    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, ".grove", "mnt", "base") + `</string></dict>
+    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, "mnt", "base") + `</string></dict>
   </array>
 </dict>
 </plist>`),
 		},
 	}
 
-	st, err := InitBase(repoRoot, r, 20, nil, nil)
+	st, err := InitBase(repoRoot, repoRoot, r, 20, nil, nil)
 	if err != nil {
 		t.Fatalf("InitBase() error = %v", err)
 	}
@@ -37,7 +37,7 @@ func TestInitBase_CreatesStateAndRunsCommands(t *testing.T) {
 	if st.BaseGeneration != 1 {
 		t.Fatalf("expected base generation 1, got %d", st.BaseGeneration)
 	}
-	if st.BasePath != filepath.Join(repoRoot, ".grove", "images", "base.sparsebundle") {
+	if st.BasePath != filepath.Join(repoRoot, "images", "base.sparsebundle") {
 		t.Fatalf("unexpected base path %q", st.BasePath)
 	}
 
@@ -68,7 +68,7 @@ func TestInitBase_RemovesInitMarkerOnFailure(t *testing.T) {
 		errs:    []error{errors.New("exit 1")},
 	}
 
-	if _, err := InitBase(repoRoot, r, 20, nil, nil); err == nil {
+	if _, err := InitBase(repoRoot, repoRoot, r, 20, nil, nil); err == nil {
 		t.Fatal("expected InitBase() to fail")
 	}
 	if _, err := os.Stat(initMarkerPath(repoRoot)); !os.IsNotExist(err) {
@@ -88,7 +88,7 @@ func TestInitBase_CallsOnProgress(t *testing.T) {
   <key>system-entities</key>
   <array>
     <dict><key>dev-entry</key><string>/dev/disk9</string></dict>
-    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, ".grove", "mnt", "base") + `</string></dict>
+    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, "mnt", "base") + `</string></dict>
   </array>
 </dict>
 </plist>`), // Attach
@@ -106,7 +106,7 @@ func TestInitBase_CallsOnProgress(t *testing.T) {
 		percents = append(percents, pct)
 	}
 
-	st, err := InitBase(repoRoot, r, 20, nil, onProgress)
+	st, err := InitBase(repoRoot, repoRoot, r, 20, nil, onProgress)
 	if err != nil {
 		t.Fatalf("InitBase() error = %v", err)
 	}
@@ -139,7 +139,7 @@ func TestInitBase_CallsOnProgress(t *testing.T) {
 
 func TestRefreshBase_CallsOnProgress(t *testing.T) {
 	repoRoot := t.TempDir()
-	basePath := filepath.Join(repoRoot, ".grove", "images", "base.sparsebundle")
+	basePath := filepath.Join(repoRoot, "images", "base.sparsebundle")
 	if err := SaveState(repoRoot, &State{
 		Backend:        "image",
 		BasePath:       basePath,
@@ -156,7 +156,7 @@ func TestRefreshBase_CallsOnProgress(t *testing.T) {
   <key>system-entities</key>
   <array>
     <dict><key>dev-entry</key><string>/dev/disk9</string></dict>
-    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, ".grove", "mnt", "base") + `</string></dict>
+    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, "mnt", "base") + `</string></dict>
   </array>
 </dict>
 </plist>`), // Attach
@@ -213,7 +213,7 @@ func TestInitBase_PassesExcludesToRsync(t *testing.T) {
   <key>system-entities</key>
   <array>
     <dict><key>dev-entry</key><string>/dev/disk9</string></dict>
-    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, ".grove", "mnt", "base") + `</string></dict>
+    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, "mnt", "base") + `</string></dict>
   </array>
 </dict>
 </plist>`), // Attach
@@ -221,7 +221,7 @@ func TestInitBase_PassesExcludesToRsync(t *testing.T) {
 	}
 
 	excludes := []string{"node_modules", "*.lock"}
-	_, err := InitBase(repoRoot, r, 20, excludes, nil)
+	_, err := InitBase(repoRoot, repoRoot, r, 20, excludes, nil)
 	if err != nil {
 		t.Fatalf("InitBase() error = %v", err)
 	}
@@ -245,7 +245,7 @@ func TestInitBase_PassesExcludesToRsync(t *testing.T) {
 
 func TestRefreshBase_PassesExcludesToRsync(t *testing.T) {
 	repoRoot := t.TempDir()
-	basePath := filepath.Join(repoRoot, ".grove", "images", "base.sparsebundle")
+	basePath := filepath.Join(repoRoot, "images", "base.sparsebundle")
 	if err := SaveState(repoRoot, &State{
 		Backend:        "image",
 		BasePath:       basePath,
@@ -262,7 +262,7 @@ func TestRefreshBase_PassesExcludesToRsync(t *testing.T) {
   <key>system-entities</key>
   <array>
     <dict><key>dev-entry</key><string>/dev/disk9</string></dict>
-    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, ".grove", "mnt", "base") + `</string></dict>
+    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, "mnt", "base") + `</string></dict>
   </array>
 </dict>
 </plist>`),
@@ -292,7 +292,7 @@ func TestRefreshBase_RefusesWhenWorkspacesExist(t *testing.T) {
 	repoRoot := t.TempDir()
 	if err := SaveState(repoRoot, &State{
 		Backend:        "image",
-		BasePath:       filepath.Join(repoRoot, ".grove", "images", "base.sparsebundle"),
+		BasePath:       filepath.Join(repoRoot, "images", "base.sparsebundle"),
 		BaseGeneration: 1,
 	}); err != nil {
 		t.Fatalf("SaveState() error = %v", err)
@@ -321,7 +321,7 @@ func TestRefreshBase_RefusesWhenWorkspacesExist(t *testing.T) {
 
 func TestRefreshBase_UpdatesGenerationAndCommit(t *testing.T) {
 	repoRoot := t.TempDir()
-	basePath := filepath.Join(repoRoot, ".grove", "images", "base.sparsebundle")
+	basePath := filepath.Join(repoRoot, "images", "base.sparsebundle")
 	if err := SaveState(repoRoot, &State{
 		Backend:        "image",
 		BasePath:       basePath,
@@ -338,7 +338,7 @@ func TestRefreshBase_UpdatesGenerationAndCommit(t *testing.T) {
   <key>system-entities</key>
   <array>
     <dict><key>dev-entry</key><string>/dev/disk9</string></dict>
-    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, ".grove", "mnt", "base") + `</string></dict>
+    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, "mnt", "base") + `</string></dict>
   </array>
 </dict>
 </plist>`),

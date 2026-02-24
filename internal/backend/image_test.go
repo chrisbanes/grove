@@ -21,12 +21,12 @@ func TestLoadOrInitImageState_UsesExistingState(t *testing.T) {
 	imageLoadState = func(string) (*image.State, error) {
 		return want, nil
 	}
-	imageInitBase = func(string, image.Runner, int, []string, func(int, string)) (*image.State, error) {
+	imageInitBase = func(string, string, image.Runner, int, []string, func(int, string)) (*image.State, error) {
 		t.Fatal("imageInitBase should not be called when state exists")
 		return nil, nil
 	}
 
-	got, initialized, err := loadOrInitImageState("/tmp/repo", nil, nil)
+	got, initialized, err := loadOrInitImageState("/tmp/runtime", "/tmp/repo", nil, nil)
 	if err != nil {
 		t.Fatalf("loadOrInitImageState() error = %v", err)
 	}
@@ -51,9 +51,12 @@ func TestLoadOrInitImageState_InitializesWhenMissing(t *testing.T) {
 	}
 
 	seenProgress := false
-	imageInitBase = func(root string, runner image.Runner, sizeGB int, excludes []string, onProgress func(int, string)) (*image.State, error) {
-		if root != "/tmp/repo" {
-			t.Fatalf("unexpected root: %s", root)
+	imageInitBase = func(runtimeRoot, goldenRoot string, runner image.Runner, sizeGB int, excludes []string, onProgress func(int, string)) (*image.State, error) {
+		if runtimeRoot != "/tmp/runtime" {
+			t.Fatalf("unexpected runtime root: %s", runtimeRoot)
+		}
+		if goldenRoot != "/tmp/repo" {
+			t.Fatalf("unexpected golden root: %s", goldenRoot)
 		}
 		if runner != nil {
 			t.Fatal("expected nil runner")
@@ -72,7 +75,7 @@ func TestLoadOrInitImageState_InitializesWhenMissing(t *testing.T) {
 	}
 
 	onProgress := func(int, string) { seenProgress = true }
-	got, initialized, err := loadOrInitImageState("/tmp/repo", []string{"node_modules"}, onProgress)
+	got, initialized, err := loadOrInitImageState("/tmp/runtime", "/tmp/repo", []string{"node_modules"}, onProgress)
 	if err != nil {
 		t.Fatalf("loadOrInitImageState() error = %v", err)
 	}
@@ -98,12 +101,12 @@ func TestLoadOrInitImageState_PropagatesLoadError(t *testing.T) {
 	imageLoadState = func(string) (*image.State, error) {
 		return nil, image.ErrInitIncomplete
 	}
-	imageInitBase = func(string, image.Runner, int, []string, func(int, string)) (*image.State, error) {
+	imageInitBase = func(string, string, image.Runner, int, []string, func(int, string)) (*image.State, error) {
 		t.Fatal("imageInitBase should not be called on non-ENOENT load errors")
 		return nil, nil
 	}
 
-	_, _, err := loadOrInitImageState("/tmp/repo", nil, nil)
+	_, _, err := loadOrInitImageState("/tmp/runtime", "/tmp/repo", nil, nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -123,11 +126,11 @@ func TestLoadOrInitImageState_PropagatesInitError(t *testing.T) {
 	imageLoadState = func(string) (*image.State, error) {
 		return nil, os.ErrNotExist
 	}
-	imageInitBase = func(string, image.Runner, int, []string, func(int, string)) (*image.State, error) {
+	imageInitBase = func(string, string, image.Runner, int, []string, func(int, string)) (*image.State, error) {
 		return nil, errors.New("hdiutil failed")
 	}
 
-	_, _, err := loadOrInitImageState("/tmp/repo", nil, nil)
+	_, _, err := loadOrInitImageState("/tmp/runtime", "/tmp/repo", nil, nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}

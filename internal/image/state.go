@@ -31,15 +31,15 @@ type WorkspaceMeta struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-func LoadState(repoRoot string) (*State, error) {
-	if detectErr := detectInitMarker(repoRoot); detectErr != nil {
+func LoadState(runtimeRoot string) (*State, error) {
+	if detectErr := detectInitMarker(runtimeRoot); detectErr != nil {
 		return nil, detectErr
 	}
 
-	data, err := os.ReadFile(stateFilePath(repoRoot))
+	data, err := os.ReadFile(stateFilePath(runtimeRoot))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			if detectErr := detectBaseWithoutState(repoRoot); detectErr != nil {
+			if detectErr := detectBaseWithoutState(runtimeRoot); detectErr != nil {
 				return nil, detectErr
 			}
 		}
@@ -52,30 +52,30 @@ func LoadState(repoRoot string) (*State, error) {
 	return &st, nil
 }
 
-func SaveState(repoRoot string, st *State) error {
-	if err := os.MkdirAll(imagesDir(repoRoot), 0755); err != nil {
+func SaveState(runtimeRoot string, st *State) error {
+	if err := os.MkdirAll(imagesDir(runtimeRoot), 0755); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(stateFilePath(repoRoot), data, 0644)
+	return os.WriteFile(stateFilePath(runtimeRoot), data, 0644)
 }
 
-func SaveWorkspaceMeta(repoRoot string, meta *WorkspaceMeta) error {
-	if err := os.MkdirAll(workspacesDir(repoRoot), 0755); err != nil {
+func SaveWorkspaceMeta(runtimeRoot string, meta *WorkspaceMeta) error {
+	if err := os.MkdirAll(workspacesDir(runtimeRoot), 0755); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(workspaceMetaPath(repoRoot, meta.ID), data, 0644)
+	return os.WriteFile(workspaceMetaPath(runtimeRoot, meta.ID), data, 0644)
 }
 
-func LoadWorkspaceMeta(repoRoot, id string) (*WorkspaceMeta, error) {
-	data, err := os.ReadFile(workspaceMetaPath(repoRoot, id))
+func LoadWorkspaceMeta(runtimeRoot, id string) (*WorkspaceMeta, error) {
+	data, err := os.ReadFile(workspaceMetaPath(runtimeRoot, id))
 	if err != nil {
 		return nil, err
 	}
@@ -86,8 +86,8 @@ func LoadWorkspaceMeta(repoRoot, id string) (*WorkspaceMeta, error) {
 	return &meta, nil
 }
 
-func ListWorkspaceMeta(repoRoot string) ([]WorkspaceMeta, error) {
-	entries, err := os.ReadDir(workspacesDir(repoRoot))
+func ListWorkspaceMeta(runtimeRoot string) ([]WorkspaceMeta, error) {
+	entries, err := os.ReadDir(workspacesDir(runtimeRoot))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -99,7 +99,7 @@ func ListWorkspaceMeta(repoRoot string) ([]WorkspaceMeta, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(workspacesDir(repoRoot), entry.Name()))
+		data, err := os.ReadFile(filepath.Join(workspacesDir(runtimeRoot), entry.Name()))
 		if err != nil {
 			return nil, err
 		}
@@ -115,50 +115,50 @@ func ListWorkspaceMeta(repoRoot string) ([]WorkspaceMeta, error) {
 	return out, nil
 }
 
-func DeleteWorkspaceMeta(repoRoot, id string) error {
-	err := os.Remove(workspaceMetaPath(repoRoot, id))
+func DeleteWorkspaceMeta(runtimeRoot, id string) error {
+	err := os.Remove(workspaceMetaPath(runtimeRoot, id))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	return err
 }
 
-func imagesDir(repoRoot string) string {
-	return filepath.Join(repoRoot, ".grove", "images")
+func imagesDir(runtimeRoot string) string {
+	return filepath.Join(runtimeRoot, "images")
 }
 
-func stateFilePath(repoRoot string) string {
-	return filepath.Join(imagesDir(repoRoot), "state.json")
+func stateFilePath(runtimeRoot string) string {
+	return filepath.Join(imagesDir(runtimeRoot), "state.json")
 }
 
-func baseImagePath(repoRoot string) string {
-	return filepath.Join(imagesDir(repoRoot), "base.sparsebundle")
+func baseImagePath(runtimeRoot string) string {
+	return filepath.Join(imagesDir(runtimeRoot), "base.sparsebundle")
 }
 
-func initMarkerPath(repoRoot string) string {
-	return filepath.Join(imagesDir(repoRoot), "init-in-progress")
+func initMarkerPath(runtimeRoot string) string {
+	return filepath.Join(imagesDir(runtimeRoot), "init-in-progress")
 }
 
-func workspacesDir(repoRoot string) string {
-	return filepath.Join(repoRoot, ".grove", "workspaces")
+func workspacesDir(runtimeRoot string) string {
+	return filepath.Join(runtimeRoot, "workspaces")
 }
 
-func workspaceMetaPath(repoRoot, id string) string {
-	return filepath.Join(workspacesDir(repoRoot), id+".json")
+func workspaceMetaPath(runtimeRoot, id string) string {
+	return filepath.Join(workspacesDir(runtimeRoot), id+".json")
 }
 
-func detectInitMarker(repoRoot string) error {
-	if _, err := os.Stat(initMarkerPath(repoRoot)); err == nil {
-		return fmt.Errorf("%w: found %s. Previous initialization may have been cancelled; remove stale image data and rerun `grove migrate --to image`", ErrInitIncomplete, initMarkerPath(repoRoot))
+func detectInitMarker(runtimeRoot string) error {
+	if _, err := os.Stat(initMarkerPath(runtimeRoot)); err == nil {
+		return fmt.Errorf("%w: found %s. Previous initialization may have been cancelled; remove stale image data and rerun `grove migrate --to image`", ErrInitIncomplete, initMarkerPath(runtimeRoot))
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil
 }
 
-func detectBaseWithoutState(repoRoot string) error {
-	if _, err := os.Stat(baseImagePath(repoRoot)); err == nil {
-		return fmt.Errorf("%w: found %s without %s; remove stale image data and rerun `grove migrate --to image`", ErrInitIncomplete, baseImagePath(repoRoot), stateFilePath(repoRoot))
+func detectBaseWithoutState(runtimeRoot string) error {
+	if _, err := os.Stat(baseImagePath(runtimeRoot)); err == nil {
+		return fmt.Errorf("%w: found %s without %s; remove stale image data and rerun `grove migrate --to image`", ErrInitIncomplete, baseImagePath(runtimeRoot), stateFilePath(runtimeRoot))
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}

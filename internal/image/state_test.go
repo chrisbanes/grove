@@ -14,7 +14,7 @@ func TestStateRoundTrip(t *testing.T) {
 
 	input := &State{
 		Backend:        "image",
-		BasePath:       ".grove/images/base.sparsebundle",
+		BasePath:       "images/base.sparsebundle",
 		BaseGeneration: 3,
 		LastSyncCommit: "abc1234",
 	}
@@ -49,7 +49,7 @@ func TestWorkspaceMetaLifecycle(t *testing.T) {
 		ID:             "main-a1b2",
 		Mountpoint:     "/tmp/grove/project/main-a1b2",
 		Device:         "/dev/disk7s1",
-		ShadowPath:     "/tmp/.grove/shadows/main-a1b2.shadow",
+		ShadowPath:     "/tmp/shadows/main-a1b2.shadow",
 		BaseGeneration: 1,
 		CreatedAt:      now,
 	}
@@ -57,7 +57,7 @@ func TestWorkspaceMetaLifecycle(t *testing.T) {
 		ID:             "main-c3d4",
 		Mountpoint:     "/tmp/grove/project/main-c3d4",
 		Device:         "/dev/disk8s1",
-		ShadowPath:     "/tmp/.grove/shadows/main-c3d4.shadow",
+		ShadowPath:     "/tmp/shadows/main-c3d4.shadow",
 		BaseGeneration: 1,
 		CreatedAt:      now,
 	}
@@ -114,12 +114,12 @@ func TestListWorkspaceMeta_NoDirectory(t *testing.T) {
 
 func TestStatePathLocation(t *testing.T) {
 	repoRoot := t.TempDir()
-	input := &State{Backend: "image", BasePath: ".grove/images/base.sparsebundle", BaseGeneration: 1}
+	input := &State{Backend: "image", BasePath: "images/base.sparsebundle", BaseGeneration: 1}
 	if err := SaveState(repoRoot, input); err != nil {
 		t.Fatalf("SaveState() error = %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(repoRoot, ".grove", "images", "state.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(repoRoot, "images", "state.json")); err != nil {
 		t.Fatalf("expected state file in .grove/images/state.json: %v", err)
 	}
 }

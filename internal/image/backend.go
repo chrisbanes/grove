@@ -8,28 +8,28 @@ import (
 
 const defaultBaseSizeGB = 200
 
-func InitBase(repoRoot string, runner Runner, baseSizeGB int, excludes []string, onProgress func(int, string)) (_ *State, err error) {
+func InitBase(runtimeRoot, goldenRoot string, runner Runner, baseSizeGB int, excludes []string, onProgress func(int, string)) (_ *State, err error) {
 	if baseSizeGB <= 0 {
 		baseSizeGB = defaultBaseSizeGB
 	}
 
-	if err := os.MkdirAll(imagesDir(repoRoot), 0755); err != nil {
+	if err := os.MkdirAll(imagesDir(runtimeRoot), 0755); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(baseMountpoint(repoRoot), 0755); err != nil {
+	if err := os.MkdirAll(baseMountpoint(runtimeRoot), 0755); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(initMarkerPath(repoRoot), []byte("initializing\n"), 0644); err != nil {
+	if err := os.WriteFile(initMarkerPath(runtimeRoot), []byte("initializing\n"), 0644); err != nil {
 		return nil, err
 	}
 	defer func() {
-		removeErr := os.Remove(initMarkerPath(repoRoot))
+		removeErr := os.Remove(initMarkerPath(runtimeRoot))
 		if err == nil && removeErr != nil && !os.IsNotExist(removeErr) {
 			err = removeErr
 		}
 	}()
 
-	basePath := baseImagePath(repoRoot)
+	basePath := baseImagePath(runtimeRoot)
 	if onProgress != nil {
 		onProgress(0, "creating base image")
 	}
@@ -37,7 +37,7 @@ func InitBase(repoRoot string, runner Runner, baseSizeGB int, excludes []string,
 		return nil, err
 	}
 
-	vol, err := Attach(runner, basePath, baseMountpoint(repoRoot))
+	vol, err := Attach(runner, basePath, baseMountpoint(runtimeRoot))
 	if err != nil {
 		return nil, err
 	}
@@ -50,11 +50,11 @@ func InitBase(repoRoot string, runner Runner, baseSizeGB int, excludes []string,
 
 	if onProgress != nil {
 		onProgress(5, "syncing golden copy")
-		err = SyncBaseWithProgress(runner, repoRoot, vol.MountPoint, excludes, func(pct int) {
+		err = SyncBaseWithProgress(runner, goldenRoot, vol.MountPoint, excludes, func(pct int) {
 			onProgress(mapPercent(pct, 100, 5, 95), "syncing golden copy")
 		})
 	} else {
-		err = SyncBase(runner, repoRoot, vol.MountPoint, excludes)
+		err = SyncBase(runner, goldenRoot, vol.MountPoint, excludes)
 	}
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func InitBase(repoRoot string, runner Runner, baseSizeGB int, excludes []string,
 		BasePath:       basePath,
 		BaseGeneration: 1,
 	}
-	if err := SaveState(repoRoot, st); err != nil {
+	if err := SaveState(runtimeRoot, st); err != nil {
 		return nil, err
 	}
 	if onProgress != nil {
@@ -74,8 +74,8 @@ func InitBase(repoRoot string, runner Runner, baseSizeGB int, excludes []string,
 	return st, nil
 }
 
-func RefreshBase(repoRoot, goldenRoot string, runner Runner, commit string, excludes []string, onProgress func(int, string)) (_ *State, err error) {
-	metas, err := ListWorkspaceMeta(repoRoot)
+func RefreshBase(runtimeRoot, goldenRoot string, runner Runner, commit string, excludes []string, onProgress func(int, string)) (_ *State, err error) {
+	metas, err := ListWorkspaceMeta(runtimeRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -83,18 +83,18 @@ func RefreshBase(repoRoot, goldenRoot string, runner Runner, commit string, excl
 		return nil, fmt.Errorf("cannot refresh base with active image workspaces (%d)", len(metas))
 	}
 
-	st, err := LoadState(repoRoot)
+	st, err := LoadState(runtimeRoot)
 	if err != nil {
 		return nil, err
 	}
 	if st.BasePath == "" {
-		st.BasePath = baseImagePath(repoRoot)
+		st.BasePath = baseImagePath(runtimeRoot)
 	}
-	if err := os.MkdirAll(baseMountpoint(repoRoot), 0755); err != nil {
+	if err := os.MkdirAll(baseMountpoint(runtimeRoot), 0755); err != nil {
 		return nil, err
 	}
 
-	vol, err := Attach(runner, st.BasePath, baseMountpoint(repoRoot))
+	vol, err := Attach(runner, st.BasePath, baseMountpoint(runtimeRoot))
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func RefreshBase(repoRoot, goldenRoot string, runner Runner, commit string, excl
 	st.BaseGeneration++
 	st.LastSyncCommit = commit
 
-	if err := SaveState(repoRoot, st); err != nil {
+	if err := SaveState(runtimeRoot, st); err != nil {
 		return nil, err
 	}
 	if onProgress != nil {
@@ -130,8 +130,8 @@ func RefreshBase(repoRoot, goldenRoot string, runner Runner, commit string, excl
 	return st, nil
 }
 
-func baseMountpoint(repoRoot string) string {
-	return filepath.Join(repoRoot, ".grove", "mnt", "base")
+func baseMountpoint(runtimeRoot string) string {
+	return filepath.Join(runtimeRoot, "mnt", "base")
 }
 
 func mapPercent(value, total, min, max int) int {

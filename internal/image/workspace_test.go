@@ -7,11 +7,11 @@ import (
 )
 
 func TestCreateWorkspace_SavesMetadata(t *testing.T) {
-	repoRoot := t.TempDir()
+	runtimeRoot := t.TempDir()
 	wsPath := filepath.Join(t.TempDir(), "workspaces", "main-a1b2")
 	st := &State{
 		Backend:        "image",
-		BasePath:       filepath.Join(repoRoot, ".grove", "images", "base.sparsebundle"),
+		BasePath:       filepath.Join(runtimeRoot, "images", "base.sparsebundle"),
 		BaseGeneration: 2,
 	}
 
@@ -30,7 +30,7 @@ func TestCreateWorkspace_SavesMetadata(t *testing.T) {
 		},
 	}
 
-	meta, err := CreateWorkspace(repoRoot, repoRoot, wsPath, "main-a1b2", st, r)
+	meta, err := CreateWorkspace(runtimeRoot, "", wsPath, "main-a1b2", st, r)
 	if err != nil {
 		t.Fatalf("CreateWorkspace() error = %v", err)
 	}
@@ -44,7 +44,7 @@ func TestCreateWorkspace_SavesMetadata(t *testing.T) {
 		t.Fatalf("expected base generation 2, got %d", meta.BaseGeneration)
 	}
 
-	loaded, err := LoadWorkspaceMeta(repoRoot, "main-a1b2")
+	loaded, err := LoadWorkspaceMeta(runtimeRoot, "main-a1b2")
 	if err != nil {
 		t.Fatalf("LoadWorkspaceMeta() error = %v", err)
 	}
@@ -54,19 +54,19 @@ func TestCreateWorkspace_SavesMetadata(t *testing.T) {
 }
 
 func TestCreateWorkspace_CleansUpOnMetadataFailure(t *testing.T) {
-	repoRoot := t.TempDir()
+	runtimeRoot := t.TempDir()
 	wsPath := filepath.Join(t.TempDir(), "workspaces", "main-a1b2")
 	st := &State{
 		Backend:        "image",
-		BasePath:       filepath.Join(repoRoot, ".grove", "images", "base.sparsebundle"),
+		BasePath:       filepath.Join(runtimeRoot, "images", "base.sparsebundle"),
 		BaseGeneration: 1,
 	}
 
-	// Force metadata write failure by making .grove/workspaces a file.
-	if err := os.MkdirAll(filepath.Join(repoRoot, ".grove"), 0755); err != nil {
-		t.Fatalf("mkdir .grove: %v", err)
+	// Force metadata write failure by making runtimeRoot/workspaces a file.
+	if err := os.MkdirAll(runtimeRoot, 0755); err != nil {
+		t.Fatalf("mkdir runtime root: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(repoRoot, ".grove", "workspaces"), []byte("not-a-dir"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(runtimeRoot, "workspaces"), []byte("not-a-dir"), 0644); err != nil {
 		t.Fatalf("write blocker file: %v", err)
 	}
 
@@ -85,7 +85,7 @@ func TestCreateWorkspace_CleansUpOnMetadataFailure(t *testing.T) {
 		},
 	}
 
-	_, err := CreateWorkspace(repoRoot, repoRoot, wsPath, "main-a1b2", st, r)
+	_, err := CreateWorkspace(runtimeRoot, "", wsPath, "main-a1b2", st, r)
 	if err == nil {
 		t.Fatal("expected create failure")
 	}
@@ -99,9 +99,9 @@ func TestCreateWorkspace_CleansUpOnMetadataFailure(t *testing.T) {
 }
 
 func TestDestroyWorkspace_DetachesAndRemovesMetadata(t *testing.T) {
-	repoRoot := t.TempDir()
+	runtimeRoot := t.TempDir()
 	mountpoint := filepath.Join(t.TempDir(), "workspaces", "main-a1b2")
-	shadowPath := filepath.Join(repoRoot, ".grove", "shadows", "main-a1b2.shadow")
+	shadowPath := filepath.Join(runtimeRoot, "shadows", "main-a1b2.shadow")
 	if err := os.MkdirAll(filepath.Dir(shadowPath), 0755); err != nil {
 		t.Fatalf("mkdir shadow dir: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestDestroyWorkspace_DetachesAndRemovesMetadata(t *testing.T) {
 	if err := os.MkdirAll(mountpoint, 0755); err != nil {
 		t.Fatalf("mkdir mountpoint: %v", err)
 	}
-	if err := SaveWorkspaceMeta(repoRoot, &WorkspaceMeta{
+	if err := SaveWorkspaceMeta(runtimeRoot, &WorkspaceMeta{
 		ID:         "main-a1b2",
 		Mountpoint: mountpoint,
 		Device:     "/dev/disk13s1",
@@ -121,7 +121,7 @@ func TestDestroyWorkspace_DetachesAndRemovesMetadata(t *testing.T) {
 	}
 
 	r := &fakeRunner{}
-	if err := DestroyWorkspace(repoRoot, "main-a1b2", r); err != nil {
+	if err := DestroyWorkspace(runtimeRoot, "main-a1b2", r); err != nil {
 		t.Fatalf("DestroyWorkspace() error = %v", err)
 	}
 
@@ -134,11 +134,10 @@ func TestDestroyWorkspace_DetachesAndRemovesMetadata(t *testing.T) {
 	if _, err := os.Stat(shadowPath); !os.IsNotExist(err) {
 		t.Fatalf("expected shadow file removed, stat err = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repoRoot, ".grove", "workspaces", "main-a1b2.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(runtimeRoot, "workspaces", "main-a1b2.json")); !os.IsNotExist(err) {
 		t.Fatalf("expected metadata removed, stat err = %v", err)
 	}
 	if _, err := os.Stat(mountpoint); !os.IsNotExist(err) {
 		t.Fatalf("expected mountpoint removed, stat err = %v", err)
 	}
 }
-

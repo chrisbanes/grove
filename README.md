@@ -80,7 +80,7 @@ grove destroy feature-new-login-a1b2
 
 ### `grove init [path]`
 
-Register a git repository as a grove-managed golden copy. Creates a `.grove/` directory with configuration, hooks, and a `.grove/.gitignore` for runtime backend artifacts. Defaults to the current directory.
+Register a git repository as a grove-managed golden copy. Creates a `.grove/` directory with configuration, hooks, and a `.grove/.gitignore` for workspace markers (and legacy runtime paths). Defaults to the current directory.
 
 ```bash
 grove init --warmup-command "npm run build" --workspace-dir ~/workspaces/myproject
@@ -279,12 +279,12 @@ is dominated by filesystem metadata work.
 
 Model:
 
-- base image: `.grove/images/base.sparsebundle`
-- per-workspace overlay: `.grove/shadows/<id>.shadow`
-- workspace metadata: `.grove/workspaces/<id>.json`
+- runtime root: `<workspace_dir>/.grove-runtime/<repo-key>/`
+- base image: `<runtime-root>/images/base.sparsebundle`
+- per-workspace overlay: `<runtime-root>/shadows/<id>.shadow`
+- workspace metadata: `<runtime-root>/workspaces/<id>.json`
 
-`grove init` writes `.grove/.gitignore` so these generated image/shadow/runtime
-files stay untracked by default.
+Runtime data lives under your configured `workspace_dir`, not inside the repo.
 
 `grove create` attaches the base image with a workspace-specific shadow, which
 makes create time mount-time fast.

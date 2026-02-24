@@ -1,11 +1,14 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -17,7 +20,7 @@ const (
 	HooksDir      = "hooks"
 )
 
-const groveGitignoreContents = `# Grove runtime state (safe to ignore)
+const groveGitignoreContents = `# Grove workspace marker and legacy runtime state (safe to ignore)
 images/base.sparsebundle/
 images/state.json
 images/init-in-progress
@@ -106,6 +109,30 @@ func ExpandWorkspaceDir(tmpl, projectName string) string {
 	return strings.ReplaceAll(tmpl, "{project}", projectName)
 }
 
+var nonAlnumPattern = regexp.MustCompile(`[^a-z0-9]+`)
+
+// ImageRuntimeRoot returns the directory that stores image backend runtime data
+// (base image, shadows, mount metadata) for this repository.
+func ImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
+	workspaceDir, err := expandedWorkspaceDirAbs(repoRoot, cfg.WorkspaceDir)
+	if err != nil {
+		return "", err
+	}
+	absRepoRoot, err := filepath.Abs(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	repoName := strings.ToLower(filepath.Base(absRepoRoot))
+	repoName = nonAlnumPattern.ReplaceAllString(repoName, "-")
+	repoName = strings.Trim(repoName, "-")
+	if repoName == "" {
+		repoName = "repo"
+	}
+	sum := sha256.Sum256([]byte(absRepoRoot))
+	token := hex.EncodeToString(sum[:6])
+	return filepath.Join(workspaceDir, ".grove-runtime", repoName+"-"+token), nil
+}
+
 // BuildImageSyncExcludes returns the excludes used for image backend base sync.
 // It includes user excludes plus the workspace directory when that directory
 // lives inside the golden copy (to avoid recursive workspace ingestion).
@@ -181,7 +208,11 @@ func EnsureBackendCompatible(repoRoot string, cfg *Config) error {
 		return nil
 	}
 
-	imageStatePath := filepath.Join(repoRoot, GroveDirName, "images", "state.json")
+	runtimeRoot, err := ImageRuntimeRoot(repoRoot, cfg)
+	if err != nil {
+		return err
+	}
+	imageStatePath := filepath.Join(runtimeRoot, "images", "state.json")
 	_, imageStateErr := os.Stat(imageStatePath)
 	hasImageState := imageStateErr == nil
 

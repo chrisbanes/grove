@@ -160,6 +160,32 @@ func TestBuildImageSyncExcludes_ErrorsWhenWorkspaceDirIsRepoRoot(t *testing.T) {
 	}
 }
 
+func TestImageRuntimeRoot_UsesWorkspaceDirAndIsStable(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "My-Repo")
+	if err := os.MkdirAll(repo, 0755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	workspaceDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
+	cfg := &config.Config{WorkspaceDir: workspaceDir}
+
+	rootA, err := config.ImageRuntimeRoot(repo, cfg)
+	if err != nil {
+		t.Fatalf("ImageRuntimeRoot() error = %v", err)
+	}
+	rootB, err := config.ImageRuntimeRoot(repo, cfg)
+	if err != nil {
+		t.Fatalf("ImageRuntimeRoot() second call error = %v", err)
+	}
+
+	if rootA != rootB {
+		t.Fatalf("expected stable runtime root, got %q vs %q", rootA, rootB)
+	}
+	prefix := filepath.Join(filepath.Dir(workspaceDir), "My-Repo", ".grove-runtime") + string(filepath.Separator)
+	if !strings.HasPrefix(rootA, prefix) {
+		t.Fatalf("expected runtime root under %q, got %q", prefix, rootA)
+	}
+}
+
 func TestFindRepoRoot(t *testing.T) {
 	dir := t.TempDir()
 	groveDir := filepath.Join(dir, ".grove")
@@ -344,6 +370,39 @@ func TestEnsureBackendCompatible_MismatchErrors(t *testing.T) {
 		t.Fatal("expected mismatch error")
 	}
 	if !strings.Contains(err.Error(), "grove migrate --to image") {
+		t.Fatalf("expected migrate guidance in error, got: %v", err)
+	}
+}
+
+func TestEnsureBackendCompatible_CPDetectsRuntimeImageState(t *testing.T) {
+	dir := t.TempDir()
+	workspaceDir := filepath.Join(t.TempDir(), "workspaces")
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+	os.WriteFile(
+		filepath.Join(dir, ".grove", "config.json"),
+		[]byte(`{"workspace_dir": "`+workspaceDir+`", "clone_backend": "cp"}`),
+		0644,
+	)
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimeRoot, err := config.ImageRuntimeRoot(dir, cfg)
+	if err != nil {
+		t.Fatalf("ImageRuntimeRoot() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(runtimeRoot, "images"), 0755); err != nil {
+		t.Fatalf("mkdir runtime images: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeRoot, "images", "state.json"), []byte(`{}`), 0644); err != nil {
+		t.Fatalf("write runtime state: %v", err)
+	}
+
+	err = config.EnsureBackendCompatible(dir, cfg)
+	if err == nil {
+		t.Fatal("expected mismatch error")
+	}
+	if !strings.Contains(err.Error(), "grove migrate --to cp") {
 		t.Fatalf("expected migrate guidance in error, got: %v", err)
 	}
 }

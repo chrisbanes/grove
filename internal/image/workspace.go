@@ -7,10 +7,10 @@ import (
 	"time"
 )
 
-func CreateWorkspace(repoRoot, goldenRoot, workspacePath, workspaceID string, st *State, runner Runner) (*WorkspaceMeta, error) {
+func CreateWorkspace(runtimeRoot, goldenRoot, workspacePath, workspaceID string, st *State, runner Runner) (*WorkspaceMeta, error) {
 	_ = goldenRoot
 	if st == nil {
-		loaded, err := LoadState(repoRoot)
+		loaded, err := LoadState(runtimeRoot)
 		if err != nil {
 			return nil, err
 		}
@@ -23,7 +23,7 @@ func CreateWorkspace(repoRoot, goldenRoot, workspacePath, workspaceID string, st
 		return nil, err
 	}
 
-	shadowPath := filepath.Join(repoRoot, ".grove", "shadows", workspaceID+".shadow")
+	shadowPath := filepath.Join(runtimeRoot, "shadows", workspaceID+".shadow")
 	if err := os.MkdirAll(filepath.Dir(shadowPath), 0755); err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func CreateWorkspace(repoRoot, goldenRoot, workspacePath, workspaceID string, st
 		BaseGeneration: st.BaseGeneration,
 		CreatedAt:      time.Now().UTC(),
 	}
-	if err := SaveWorkspaceMeta(repoRoot, meta); err != nil {
+	if err := SaveWorkspaceMeta(runtimeRoot, meta); err != nil {
 		_ = Detach(runner, vol.Device)
 		_ = os.Remove(shadowPath)
 		return nil, err
@@ -49,8 +49,8 @@ func CreateWorkspace(repoRoot, goldenRoot, workspacePath, workspaceID string, st
 	return meta, nil
 }
 
-func DestroyWorkspace(repoRoot, workspaceID string, runner Runner) error {
-	meta, err := LoadWorkspaceMeta(repoRoot, workspaceID)
+func DestroyWorkspace(runtimeRoot, workspaceID string, runner Runner) error {
+	meta, err := LoadWorkspaceMeta(runtimeRoot, workspaceID)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func DestroyWorkspace(repoRoot, workspaceID string, runner Runner) error {
 	if err := os.Remove(meta.ShadowPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if err := DeleteWorkspaceMeta(repoRoot, workspaceID); err != nil {
+	if err := DeleteWorkspaceMeta(runtimeRoot, workspaceID); err != nil {
 		return err
 	}
 	if err := os.RemoveAll(meta.Mountpoint); err != nil {
@@ -68,4 +68,3 @@ func DestroyWorkspace(repoRoot, workspaceID string, runner Runner) error {
 	}
 	return nil
 }
-
