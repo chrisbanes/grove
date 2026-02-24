@@ -236,7 +236,7 @@ func TestFullLifecycle(t *testing.T) {
 
 	// grove config
 	out := grove(t, binary, repo, "config")
-	if !strings.Contains(out, "Grove initialized") {
+	if !strings.Contains(out, "Grove configured") {
 		t.Fatalf("unexpected config output: %s", out)
 	}
 
@@ -547,8 +547,8 @@ func TestConfigEdgeCases(t *testing.T) {
 		grove(t, binary, repo, "config")
 		// Re-running config should succeed (update config, not error)
 		out := grove(t, binary, repo, "config")
-		if !strings.Contains(out, "Grove initialized") {
-			t.Errorf("expected 'Grove initialized' on re-config, got: %s", out)
+		if !strings.Contains(out, "Grove configured") {
+			t.Errorf("expected 'Grove configured' on re-config, got: %s", out)
 		}
 	})
 
