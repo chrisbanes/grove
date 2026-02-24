@@ -24,6 +24,7 @@ const (
 
 const groveGitignoreContents = `# Grove local metadata (safe to ignore)
 workspace.json
+backend.json
 .runtime-id
 `
 

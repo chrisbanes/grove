@@ -38,6 +38,10 @@ var updateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		// Ensure .grove/ exists before backend compat check writes backend.json
+		if err := config.EnsureMinimalGroveDir(goldenRoot); err != nil {
+			return err
+		}
 		if err := config.EnsureBackendCompatible(goldenRoot, cfg); err != nil {
 			return err
 		}

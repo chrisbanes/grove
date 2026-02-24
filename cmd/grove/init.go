@@ -238,7 +238,6 @@ func init() {
 	initCmd.Flags().String("workspace-dir", "", "Directory for workspaces (default: ~/.grove/{project})")
 	initCmd.Flags().String("backend", "", "Workspace backend: cp or image (experimental)")
 	initCmd.Flags().Int("image-size-gb", 200, "Base sparsebundle size in GB when using --backend image")
-	initCmd.Flags().Bool("force", false, "Proceed even if golden copy has uncommitted changes")
 	initCmd.Flags().Bool("progress", false, "Show progress output during image backend initialization")
 	initCmd.Flags().Bool("defaults", false, "Skip interactive prompts and use all defaults")
 	rootCmd.AddCommand(initCmd)
