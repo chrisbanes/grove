@@ -45,7 +45,7 @@ var migrateCmd = &cobra.Command{
 		// Migrate requires explicit init since it changes backend config
 		cfgPath := filepath.Join(goldenRoot, config.GroveDirName, config.ConfigFile)
 		if _, err := os.Stat(cfgPath); err != nil {
-			return fmt.Errorf("grove not initialized. Run `grove init` first to configure a backend before migrating")
+			return fmt.Errorf("grove not configured. Run `grove config` first to configure a backend before migrating")
 		}
 
 		to, _ := cmd.Flags().GetString("to")
