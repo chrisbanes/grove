@@ -708,3 +708,27 @@ func TestFindGroveRoot_NoGitNoGrove(t *testing.T) {
 		t.Fatal("expected error for non-git, non-grove directory")
 	}
 }
+
+func TestEnsureMinimalGroveDir(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := config.EnsureMinimalGroveDir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, config.GroveDirName)); err != nil {
+		t.Error(".grove/ not created")
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, config.GroveDirName, ".gitignore"))
+	if err != nil {
+		t.Fatal(".grove/.gitignore not created")
+	}
+	if !strings.Contains(string(data), "workspace.json") {
+		t.Error(".gitignore missing workspace.json entry")
+	}
+
+	if err := config.EnsureMinimalGroveDir(dir); err != nil {
+		t.Fatalf("second call failed: %v", err)
+	}
+}

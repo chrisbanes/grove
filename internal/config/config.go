@@ -140,6 +140,17 @@ func EnsureGroveGitignore(repoRoot string) error {
 	return os.WriteFile(path, []byte(groveGitignoreContents), 0644)
 }
 
+// EnsureMinimalGroveDir creates a .grove/ directory with just a .gitignore.
+// This is the lazy-init path: no config.json, no hooks dir. Used by commands
+// like create that need to write runtime files (.runtime-id, workspace.json).
+func EnsureMinimalGroveDir(repoRoot string) error {
+	groveDir := filepath.Join(repoRoot, GroveDirName)
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		return err
+	}
+	return EnsureGroveGitignore(repoRoot)
+}
+
 func ExpandWorkspaceDir(tmpl, projectName string) string {
 	expanded := strings.ReplaceAll(tmpl, "{project}", projectName)
 	if strings.HasPrefix(expanded, "~/") {
