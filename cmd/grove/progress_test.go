@@ -98,7 +98,7 @@ func TestNewFancyProgress_UsesCustomLabel(t *testing.T) {
 	r.Done()
 }
 
-func TestResolveProgress_DefaultsTrueWhenStderrIsTTY(t *testing.T) {
+func TestResolveProgress_FallsBackToTTYDetection(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("progress", false, "")
 	// Flag not changed — should fall back to isTerminalFile(os.Stderr).
