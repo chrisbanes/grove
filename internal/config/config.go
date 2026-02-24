@@ -75,6 +75,24 @@ func Load(repoRoot string) (*Config, error) {
 	return &cfg, nil
 }
 
+// LoadOrDefault loads config from .grove/config.json if it exists,
+// otherwise returns default config. This enables config-free mode
+// where grove works without explicit initialization.
+func LoadOrDefault(repoRoot string) (*Config, error) {
+	path := filepath.Join(repoRoot, GroveDirName, ConfigFile)
+	_, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		projectName := filepath.Base(repoRoot)
+		cfg := DefaultConfig(projectName)
+		cfg.CloneBackend = "cp"
+		return cfg, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return Load(repoRoot)
+}
+
 func normalizeCloneBackend(value string) (string, error) {
 	if value == "" {
 		return "cp", nil

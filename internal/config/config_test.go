@@ -612,3 +612,57 @@ func TestEnsureGroveGitignore_DoesNotOverwriteExisting(t *testing.T) {
 		t.Fatalf("expected existing .gitignore to remain unchanged, got:\n%s", string(data))
 	}
 }
+
+func TestLoadOrDefault_NoConfig(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, config.GroveDirName), 0755)
+
+	cfg, err := config.LoadOrDefault(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.WorkspaceDir != "~/.grove/{project}" {
+		t.Errorf("expected default workspace dir, got %q", cfg.WorkspaceDir)
+	}
+	if cfg.CloneBackend != "cp" {
+		t.Errorf("expected cp backend, got %q", cfg.CloneBackend)
+	}
+	if cfg.MaxWorkspaces != 10 {
+		t.Errorf("expected 10 max workspaces, got %d", cfg.MaxWorkspaces)
+	}
+}
+
+func TestLoadOrDefault_WithConfig(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, config.GroveDirName), 0755)
+	cfg := &config.Config{
+		WorkspaceDir:  "/custom/path",
+		MaxWorkspaces: 5,
+		CloneBackend:  "image",
+	}
+	if err := config.Save(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := config.LoadOrDefault(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if loaded.WorkspaceDir != "/custom/path" {
+		t.Errorf("expected /custom/path, got %q", loaded.WorkspaceDir)
+	}
+	if loaded.CloneBackend != "image" {
+		t.Errorf("expected image, got %q", loaded.CloneBackend)
+	}
+}
+
+func TestLoadOrDefault_NoGroveDir(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := config.LoadOrDefault(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.WorkspaceDir != "~/.grove/{project}" {
+		t.Errorf("expected default workspace dir, got %q", cfg.WorkspaceDir)
+	}
+}
