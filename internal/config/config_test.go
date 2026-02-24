@@ -19,6 +19,14 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig_WorkspaceDir(t *testing.T) {
+	cfg := config.DefaultConfig("myapp")
+	want := "~/.grove/{project}"
+	if cfg.WorkspaceDir != want {
+		t.Errorf("DefaultConfig().WorkspaceDir = %q, want %q", cfg.WorkspaceDir, want)
+	}
+}
+
 func TestSaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
 	groveDir := filepath.Join(dir, ".grove")
@@ -105,6 +113,16 @@ func TestExpandWorkspaceDir(t *testing.T) {
 	}
 	if filepath.Base(expanded) != "myapp" {
 		t.Errorf("expected 'myapp' in path, got %q", expanded)
+	}
+}
+
+func TestExpandWorkspaceDir_Tilde(t *testing.T) {
+	result := config.ExpandWorkspaceDir("~/.grove/{project}", "myapp")
+	if strings.HasPrefix(result, "~") {
+		t.Errorf("tilde not expanded: %s", result)
+	}
+	if !strings.HasSuffix(result, "/.grove/myapp") {
+		t.Errorf("unexpected expansion: %s", result)
 	}
 }
 

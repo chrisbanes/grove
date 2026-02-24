@@ -137,7 +137,7 @@ Creates a .grove/ directory with config and optional hooks.`,
 
 func init() {
 	initCmd.Flags().String("warmup-command", "", "Command to run for warming up build caches")
-	initCmd.Flags().String("workspace-dir", "", "Directory for workspaces (default: /tmp/grove/{project})")
+	initCmd.Flags().String("workspace-dir", "", "Directory for workspaces (default: ~/.grove/{project})")
 	initCmd.Flags().String("backend", "cp", "Workspace backend: cp or image (experimental)")
 	initCmd.Flags().Int("image-size-gb", 200, "Base sparsebundle size in GB when using --backend image")
 	initCmd.Flags().Bool("force", false, "Proceed even if golden copy has uncommitted changes")

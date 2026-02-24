@@ -37,7 +37,7 @@ type Config struct {
 
 func DefaultConfig(projectName string) *Config {
 	return &Config{
-		WorkspaceDir:  "/tmp/grove/{project}",
+		WorkspaceDir:  "~/.grove/{project}",
 		MaxWorkspaces: 10,
 	}
 }
@@ -123,7 +123,13 @@ func EnsureGroveGitignore(repoRoot string) error {
 }
 
 func ExpandWorkspaceDir(tmpl, projectName string) string {
-	return strings.ReplaceAll(tmpl, "{project}", projectName)
+	expanded := strings.ReplaceAll(tmpl, "{project}", projectName)
+	if strings.HasPrefix(expanded, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			expanded = filepath.Join(home, expanded[2:])
+		}
+	}
+	return expanded
 }
 
 var nonAlnumPattern = regexp.MustCompile(`[^a-z0-9]+`)
