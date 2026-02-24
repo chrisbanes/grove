@@ -169,6 +169,16 @@ func ExpandWorkspaceDir(tmpl, projectName string) string {
 	return expanded
 }
 
+// ExpandStateDir expands ~ in the state directory path.
+func ExpandStateDir(stateDir string) string {
+	if strings.HasPrefix(stateDir, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, stateDir[2:])
+		}
+	}
+	return stateDir
+}
+
 var nonAlnumPattern = regexp.MustCompile(`[^a-z0-9]+`)
 var runtimeIDPattern = regexp.MustCompile(`^[a-z0-9]+$`)
 
@@ -209,14 +219,18 @@ func saveRuntimeID(repoRoot, runtimeID string) error {
 // ImageRuntimeRoot returns the directory that stores image backend runtime data
 // (base image, shadows, mount metadata) for this repository.
 func ImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
-	workspaceDir, err := expandedWorkspaceDirAbs(repoRoot, cfg.WorkspaceDir)
-	if err != nil {
-		return "", err
+	stateDir := ExpandStateDir(cfg.StateDir)
+	if !filepath.IsAbs(stateDir) {
+		var err error
+		stateDir, err = filepath.Abs(stateDir)
+		if err != nil {
+			return "", err
+		}
 	}
 	runtimeID, err := LoadRuntimeID(repoRoot)
 	switch {
 	case err == nil:
-		return runtimeRootForID(workspaceDir, runtimeID), nil
+		return runtimeRootForID(stateDir, runtimeID), nil
 	case !errors.Is(err, os.ErrNotExist):
 		return "", err
 	}
@@ -226,9 +240,13 @@ func ImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
 // EnsureImageRuntimeRoot ensures the runtime ID file is present and migrates any
 // legacy runtime path into the runtime-id-based path.
 func EnsureImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
-	workspaceDir, err := expandedWorkspaceDirAbs(repoRoot, cfg.WorkspaceDir)
-	if err != nil {
-		return "", err
+	stateDir := ExpandStateDir(cfg.StateDir)
+	if !filepath.IsAbs(stateDir) {
+		var err error
+		stateDir, err = filepath.Abs(stateDir)
+		if err != nil {
+			return "", err
+		}
 	}
 	runtimeID, err := LoadRuntimeID(repoRoot)
 	if err != nil {
@@ -243,7 +261,7 @@ func EnsureImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
 			return "", err
 		}
 	}
-	runtimeRoot := runtimeRootForID(workspaceDir, runtimeID)
+	runtimeRoot := runtimeRootForID(stateDir, runtimeID)
 	legacyRoot, err := legacyImageRuntimeRoot(repoRoot, cfg)
 	if err != nil {
 		return "", err
@@ -272,8 +290,8 @@ func EnsureImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
 	return runtimeRoot, nil
 }
 
-func runtimeRootForID(workspaceDir, runtimeID string) string {
-	return filepath.Join(workspaceDir, "runtimes", runtimeID)
+func runtimeRootForID(stateDir, runtimeID string) string {
+	return filepath.Join(stateDir, "runtimes", runtimeID)
 }
 
 func legacyImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
@@ -302,11 +320,13 @@ func legacyImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
 func BuildImageSyncExcludes(goldenRoot string, cfg *Config) ([]string, error) {
 	excludes := append([]string(nil), cfg.Exclude...)
 
-	workspaceDir, err := expandedWorkspaceDirAbs(goldenRoot, cfg.WorkspaceDir)
+	absGoldenRoot, err := filepath.Abs(goldenRoot)
 	if err != nil {
 		return nil, err
 	}
-	absGoldenRoot, err := filepath.Abs(goldenRoot)
+
+	// Exclude workspace_dir if inside repo
+	workspaceDir, err := expandedWorkspaceDirAbs(goldenRoot, cfg.WorkspaceDir)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +334,6 @@ func BuildImageSyncExcludes(goldenRoot string, cfg *Config) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	rel = filepath.Clean(rel)
 	if rel == "." {
 		return nil, fmt.Errorf("workspace_dir resolves to the repository root; choose a subdirectory or external path")
@@ -322,6 +341,24 @@ func BuildImageSyncExcludes(goldenRoot string, cfg *Config) ([]string, error) {
 	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		excludes = append(excludes, filepath.ToSlash(rel)+"/")
 	}
+
+	// Exclude state_dir if inside repo
+	stateDir := ExpandStateDir(cfg.StateDir)
+	if !filepath.IsAbs(stateDir) {
+		stateDir, err = filepath.Abs(stateDir)
+		if err != nil {
+			return nil, err
+		}
+	}
+	rel, err = filepath.Rel(absGoldenRoot, stateDir)
+	if err != nil {
+		return nil, err
+	}
+	rel = filepath.Clean(rel)
+	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "." {
+		excludes = append(excludes, filepath.ToSlash(rel)+"/")
+	}
+
 	return excludes, nil
 }
 

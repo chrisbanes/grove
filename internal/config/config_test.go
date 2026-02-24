@@ -207,8 +207,9 @@ func TestImageRuntimeRoot_UsesRuntimeIDFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, ".grove", ".runtime-id"), []byte("abc123\n"), 0644); err != nil {
 		t.Fatalf("write runtime id: %v", err)
 	}
+	stateDir := filepath.Join(t.TempDir(), "state")
 	workspaceDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
-	cfg := &config.Config{WorkspaceDir: workspaceDir}
+	cfg := &config.Config{WorkspaceDir: workspaceDir, StateDir: stateDir}
 
 	rootA, err := config.ImageRuntimeRoot(repo, cfg)
 	if err != nil {
@@ -222,7 +223,7 @@ func TestImageRuntimeRoot_UsesRuntimeIDFile(t *testing.T) {
 	if rootA != rootB {
 		t.Fatalf("expected stable runtime root, got %q vs %q", rootA, rootB)
 	}
-	want := filepath.Join(filepath.Dir(workspaceDir), "My-Repo", "runtimes", "abc123")
+	want := filepath.Join(stateDir, "runtimes", "abc123")
 	if rootA != want {
 		t.Fatalf("expected runtime root %q, got %q", want, rootA)
 	}
@@ -234,7 +235,7 @@ func TestImageRuntimeRoot_WithoutRuntimeIDFallsBackToLegacyPath(t *testing.T) {
 		t.Fatalf("mkdir repo: %v", err)
 	}
 	workspaceDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
-	cfg := &config.Config{WorkspaceDir: workspaceDir}
+	cfg := &config.Config{WorkspaceDir: workspaceDir, StateDir: filepath.Join(t.TempDir(), "state")}
 
 	root, err := config.ImageRuntimeRoot(repo, cfg)
 	if err != nil {
@@ -251,9 +252,11 @@ func TestEnsureImageRuntimeRoot_AssignsRuntimeIDAndMigratesLegacyDir(t *testing.
 	if err := os.MkdirAll(filepath.Join(repo, ".grove"), 0755); err != nil {
 		t.Fatalf("mkdir .grove: %v", err)
 	}
+	stateDir := filepath.Join(t.TempDir(), "state")
 	workspaceDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
 	cfg := &config.Config{
 		WorkspaceDir:  workspaceDir,
+		StateDir:      stateDir,
 		CloneBackend:  "image",
 		MaxWorkspaces: 10,
 	}
@@ -280,7 +283,7 @@ func TestEnsureImageRuntimeRoot_AssignsRuntimeIDAndMigratesLegacyDir(t *testing.
 	if err != nil {
 		t.Fatalf("LoadRuntimeID() error = %v", err)
 	}
-	wantRoot := filepath.Join(filepath.Dir(workspaceDir), "My-Repo", "runtimes", runtimeID)
+	wantRoot := filepath.Join(stateDir, "runtimes", runtimeID)
 	if runtimeRoot != wantRoot {
 		t.Fatalf("expected runtime root %q, got %q", wantRoot, runtimeRoot)
 	}
@@ -308,6 +311,7 @@ func TestEnsureImageRuntimeRoot_DoesNotPersistExpandedWorkspaceDir(t *testing.T)
 	templateDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
 	savedCfg := &config.Config{
 		WorkspaceDir:  templateDir,
+		StateDir:      filepath.Join(t.TempDir(), "state"),
 		CloneBackend:  "image",
 		MaxWorkspaces: 10,
 	}
@@ -767,5 +771,46 @@ func TestSaveAndLoad_StateDir(t *testing.T) {
 	}
 	if loaded.StateDir != "/custom/state" {
 		t.Errorf("expected /custom/state, got %q", loaded.StateDir)
+	}
+}
+
+func TestExpandStateDir(t *testing.T) {
+	result := config.ExpandStateDir("~/.grove")
+	if strings.HasPrefix(result, "~") {
+		t.Errorf("tilde not expanded: %s", result)
+	}
+	if !strings.HasSuffix(result, "/.grove") {
+		t.Errorf("unexpected expansion: %s", result)
+	}
+}
+
+func TestExpandStateDir_Absolute(t *testing.T) {
+	result := config.ExpandStateDir("/custom/state")
+	if result != "/custom/state" {
+		t.Errorf("expected /custom/state, got %q", result)
+	}
+}
+
+func TestImageRuntimeRoot_UsesStateDir(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "My-Repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".grove"), 0755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".grove", ".runtime-id"), []byte("abc123\n"), 0644); err != nil {
+		t.Fatalf("write runtime id: %v", err)
+	}
+	stateDir := filepath.Join(t.TempDir(), "state")
+	cfg := &config.Config{
+		WorkspaceDir: filepath.Join(t.TempDir(), "workspaces"),
+		StateDir:     stateDir,
+	}
+
+	root, err := config.ImageRuntimeRoot(repo, cfg)
+	if err != nil {
+		t.Fatalf("ImageRuntimeRoot() error = %v", err)
+	}
+	want := filepath.Join(stateDir, "runtimes", "abc123")
+	if root != want {
+		t.Fatalf("expected runtime root %q, got %q", want, root)
 	}
 }
