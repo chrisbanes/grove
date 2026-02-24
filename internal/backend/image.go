@@ -26,7 +26,12 @@ func (imageBackend) Name() string {
 }
 
 func (imageBackend) CreateWorkspace(goldenRoot string, cfg *config.Config, opts CreateOptions) (*workspace.Info, error) {
-	st, _, err := loadOrInitImageState(goldenRoot, cfg.Exclude, nil)
+	excludes, err := config.BuildImageSyncExcludes(goldenRoot, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("computing image sync excludes: %w", err)
+	}
+
+	st, _, err := loadOrInitImageState(goldenRoot, excludes, nil)
 	if err != nil {
 		return nil, err
 	}

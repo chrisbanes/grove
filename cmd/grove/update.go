@@ -62,8 +62,15 @@ var updateCmd = &cobra.Command{
 		}
 
 		commit, _ := gitpkg.CurrentCommit(goldenRoot)
+		excludes := cfg.Exclude
 		if backendImpl.Name() == "image" && progress == nil {
 			fmt.Println("Refreshing image backend...")
+		}
+		if backendImpl.Name() == "image" {
+			excludes, err = config.BuildImageSyncExcludes(goldenRoot, cfg)
+			if err != nil {
+				return fmt.Errorf("computing image sync excludes: %w", err)
+			}
 		}
 		var onProgress func(int, string)
 		if progress != nil {
@@ -71,7 +78,7 @@ var updateCmd = &cobra.Command{
 				progress.Update(pct, phase)
 			}
 		}
-		if err := backendImpl.RefreshBase(goldenRoot, commit, cfg.Exclude, onProgress); err != nil {
+		if err := backendImpl.RefreshBase(goldenRoot, commit, excludes, onProgress); err != nil {
 			return err
 		}
 		fmt.Printf("Golden copy updated to %s\n", commit)

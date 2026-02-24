@@ -78,13 +78,17 @@ var migrateCmd = &cobra.Command{
 				if progress == nil {
 					fmt.Println("Initializing image backend...")
 				}
+				excludes, err := config.BuildImageSyncExcludes(goldenRoot, cfg)
+				if err != nil {
+					return fmt.Errorf("computing image sync excludes: %w", err)
+				}
 				var onProgress func(int, string)
 				if progress != nil {
 					onProgress = func(pct int, phase string) {
 						progress.Update(pct, phase)
 					}
 				}
-				if _, err := image.InitBase(goldenRoot, nil, sizeGB, cfg.Exclude, onProgress); err != nil {
+				if _, err := image.InitBase(goldenRoot, nil, sizeGB, excludes, onProgress); err != nil {
 					return fmt.Errorf("initializing image backend: %w", err)
 				}
 			}

@@ -106,6 +106,43 @@ func ExpandWorkspaceDir(tmpl, projectName string) string {
 	return strings.ReplaceAll(tmpl, "{project}", projectName)
 }
 
+// BuildImageSyncExcludes returns the excludes used for image backend base sync.
+// It includes user excludes plus the workspace directory when that directory
+// lives inside the golden copy (to avoid recursive workspace ingestion).
+func BuildImageSyncExcludes(goldenRoot string, cfg *Config) ([]string, error) {
+	excludes := append([]string(nil), cfg.Exclude...)
+
+	workspaceDir, err := expandedWorkspaceDirAbs(goldenRoot, cfg.WorkspaceDir)
+	if err != nil {
+		return nil, err
+	}
+	absGoldenRoot, err := filepath.Abs(goldenRoot)
+	if err != nil {
+		return nil, err
+	}
+	rel, err := filepath.Rel(absGoldenRoot, workspaceDir)
+	if err != nil {
+		return nil, err
+	}
+
+	rel = filepath.Clean(rel)
+	if rel == "." {
+		return nil, fmt.Errorf("workspace_dir resolves to the repository root; choose a subdirectory or external path")
+	}
+	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		excludes = append(excludes, filepath.ToSlash(rel)+"/")
+	}
+	return excludes, nil
+}
+
+func expandedWorkspaceDirAbs(goldenRoot, workspaceDir string) (string, error) {
+	expanded := ExpandWorkspaceDir(workspaceDir, filepath.Base(goldenRoot))
+	if !filepath.IsAbs(expanded) {
+		expanded = filepath.Join(goldenRoot, expanded)
+	}
+	return filepath.Abs(expanded)
+}
+
 func FindGroveRoot(startPath string) (string, error) {
 	absPath, err := filepath.Abs(startPath)
 	if err != nil {

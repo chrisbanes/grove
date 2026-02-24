@@ -88,6 +88,78 @@ func TestExpandWorkspaceDir(t *testing.T) {
 	}
 }
 
+func TestBuildImageSyncExcludes_AddsWorkspaceDirWhenInsideRepo(t *testing.T) {
+	repo := t.TempDir()
+	cfg := &config.Config{
+		WorkspaceDir: filepath.Join(repo, "workspaces"),
+		Exclude:      []string{"node_modules"},
+	}
+
+	excludes, err := config.BuildImageSyncExcludes(repo, cfg)
+	if err != nil {
+		t.Fatalf("BuildImageSyncExcludes() error = %v", err)
+	}
+
+	if len(excludes) != 2 {
+		t.Fatalf("expected 2 excludes, got %d: %v", len(excludes), excludes)
+	}
+	if excludes[0] != "node_modules" {
+		t.Fatalf("expected first exclude node_modules, got %q", excludes[0])
+	}
+	if excludes[1] != "workspaces/" {
+		t.Fatalf("expected workspace exclude workspaces/, got %q", excludes[1])
+	}
+}
+
+func TestBuildImageSyncExcludes_NoWorkspaceExcludeWhenOutsideRepo(t *testing.T) {
+	repo := t.TempDir()
+	cfg := &config.Config{
+		WorkspaceDir: filepath.Join(t.TempDir(), "workspaces"),
+		Exclude:      []string{"node_modules"},
+	}
+
+	excludes, err := config.BuildImageSyncExcludes(repo, cfg)
+	if err != nil {
+		t.Fatalf("BuildImageSyncExcludes() error = %v", err)
+	}
+	if len(excludes) != 1 || excludes[0] != "node_modules" {
+		t.Fatalf("expected user excludes only, got %v", excludes)
+	}
+}
+
+func TestBuildImageSyncExcludes_ExpandsTemplateBeforeComparison(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "myproj")
+	if err := os.MkdirAll(repo, 0755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	cfg := &config.Config{
+		WorkspaceDir: "workspaces/{project}",
+	}
+
+	excludes, err := config.BuildImageSyncExcludes(repo, cfg)
+	if err != nil {
+		t.Fatalf("BuildImageSyncExcludes() error = %v", err)
+	}
+	if len(excludes) != 1 || excludes[0] != "workspaces/myproj/" {
+		t.Fatalf("expected expanded workspace exclude, got %v", excludes)
+	}
+}
+
+func TestBuildImageSyncExcludes_ErrorsWhenWorkspaceDirIsRepoRoot(t *testing.T) {
+	repo := t.TempDir()
+	cfg := &config.Config{
+		WorkspaceDir: ".",
+	}
+
+	_, err := config.BuildImageSyncExcludes(repo, cfg)
+	if err == nil {
+		t.Fatal("expected error when workspace dir resolves to repo root")
+	}
+	if !strings.Contains(err.Error(), "repository root") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestFindRepoRoot(t *testing.T) {
 	dir := t.TempDir()
 	groveDir := filepath.Join(dir, ".grove")
