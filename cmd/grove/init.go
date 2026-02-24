@@ -64,6 +64,9 @@ Creates a .grove/ directory with config and optional hooks.`,
 		if err := os.MkdirAll(filepath.Join(groveDir, config.HooksDir), 0755); err != nil {
 			return err
 		}
+		if err := config.EnsureGroveGitignore(absPath); err != nil {
+			return fmt.Errorf("writing .grove/.gitignore: %w", err)
+		}
 
 		// Write default config
 		projectName := filepath.Base(absPath)
@@ -104,13 +107,21 @@ Creates a .grove/ directory with config and optional hooks.`,
 			if progress == nil {
 				fmt.Println("Initializing image backend...")
 			}
+			runtimeRoot, err := config.EnsureImageRuntimeRoot(absPath, cfg)
+			if err != nil {
+				return fmt.Errorf("resolving image runtime root: %w", err)
+			}
+			excludes, err := config.BuildImageSyncExcludes(absPath, cfg)
+			if err != nil {
+				return fmt.Errorf("computing image sync excludes: %w", err)
+			}
 			var onProgress func(int, string)
 			if progress != nil {
 				onProgress = func(pct int, phase string) {
 					progress.Update(pct, phase)
 				}
 			}
-			if _, err := image.InitBase(absPath, nil, imageSizeGB, cfg.Exclude, onProgress); err != nil {
+			if _, err := image.InitBase(runtimeRoot, absPath, nil, imageSizeGB, excludes, onProgress); err != nil {
 				return fmt.Errorf("initializing image backend: %w", err)
 			}
 		}

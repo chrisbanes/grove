@@ -259,6 +259,14 @@ func TestImageBackendLifecycle(t *testing.T) {
 
 	// Initialize with the experimental image backend.
 	grove(t, binary, repo, "init", "--backend", "image", "--image-size-gb", "5")
+	cfg, err := config.Load(repo)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	runtimeRoot, err := config.ImageRuntimeRoot(repo, cfg)
+	if err != nil {
+		t.Fatalf("resolve image runtime root: %v", err)
+	}
 
 	// Create workspace and validate marker + metadata.
 	out := grove(t, binary, repo, "create", "--json")
@@ -269,7 +277,7 @@ func TestImageBackendLifecycle(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(info.Path, ".grove", config.WorkspaceFile)); err != nil {
 		t.Fatalf("expected workspace marker: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, ".grove", "workspaces", info.ID+".json")); err != nil {
+	if _, err := os.Stat(filepath.Join(runtimeRoot, "workspaces", info.ID+".json")); err != nil {
 		t.Fatalf("expected image workspace metadata: %v", err)
 	}
 
@@ -278,7 +286,7 @@ func TestImageBackendLifecycle(t *testing.T) {
 	if _, err := os.Stat(info.Path); !os.IsNotExist(err) {
 		t.Fatalf("expected workspace path removed, got err=%v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, ".grove", "workspaces", info.ID+".json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(runtimeRoot, "workspaces", info.ID+".json")); !os.IsNotExist(err) {
 		t.Fatalf("expected image workspace metadata removed, got err=%v", err)
 	}
 }

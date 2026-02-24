@@ -10,8 +10,12 @@ import (
 )
 
 func destroyWorkspace(goldenRoot string, cfg *config.Config, id string) error {
-	if _, err := image.LoadWorkspaceMeta(goldenRoot, id); err == nil {
-		return image.DestroyWorkspace(goldenRoot, id, nil)
+	runtimeRoot, err := config.EnsureImageRuntimeRoot(goldenRoot, cfg)
+	if err != nil {
+		return err
+	}
+	if _, err := image.LoadWorkspaceMeta(runtimeRoot, id); err == nil {
+		return image.DestroyWorkspace(runtimeRoot, id, nil)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}

@@ -49,7 +49,7 @@ var migrateCmd = &cobra.Command{
 			return fmt.Errorf("invalid --to %q: expected cp or image", to)
 		}
 
-		currentBackend, err := detectInitializedBackend(goldenRoot)
+		currentBackend, err := detectInitializedBackend(goldenRoot, cfg)
 		if err != nil {
 			return err
 		}
@@ -70,7 +70,11 @@ var migrateCmd = &cobra.Command{
 
 		switch to {
 		case "image":
-			if _, err := image.LoadState(goldenRoot); err != nil {
+			runtimeRoot, err := config.EnsureImageRuntimeRoot(goldenRoot, cfg)
+			if err != nil {
+				return fmt.Errorf("resolving image runtime root: %w", err)
+			}
+			if _, err := image.LoadState(runtimeRoot); err != nil {
 				if !errors.Is(err, os.ErrNotExist) {
 					return fmt.Errorf("loading image backend state: %w", err)
 				}
@@ -78,18 +82,26 @@ var migrateCmd = &cobra.Command{
 				if progress == nil {
 					fmt.Println("Initializing image backend...")
 				}
+				excludes, err := config.BuildImageSyncExcludes(goldenRoot, cfg)
+				if err != nil {
+					return fmt.Errorf("computing image sync excludes: %w", err)
+				}
 				var onProgress func(int, string)
 				if progress != nil {
 					onProgress = func(pct int, phase string) {
 						progress.Update(pct, phase)
 					}
 				}
-				if _, err := image.InitBase(goldenRoot, nil, sizeGB, cfg.Exclude, onProgress); err != nil {
+				if _, err := image.InitBase(runtimeRoot, goldenRoot, nil, sizeGB, excludes, onProgress); err != nil {
 					return fmt.Errorf("initializing image backend: %w", err)
 				}
 			}
 		case "cp":
-			metas, err := image.ListWorkspaceMeta(goldenRoot)
+			runtimeRoot, err := config.EnsureImageRuntimeRoot(goldenRoot, cfg)
+			if err != nil {
+				return fmt.Errorf("resolving image runtime root: %w", err)
+			}
+			metas, err := image.ListWorkspaceMeta(runtimeRoot)
 			if err != nil {
 				return err
 			}
@@ -119,12 +131,23 @@ func init() {
 	rootCmd.AddCommand(migrateCmd)
 }
 
-func detectInitializedBackend(repoRoot string) (string, error) {
+func detectInitializedBackend(repoRoot string, cfg *config.Config) (string, error) {
 	backend, err := config.LoadBackendState(repoRoot)
 	if err == nil {
 		return backend, nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	runtimeRoot, err := config.ImageRuntimeRoot(repoRoot, cfg)
+	if err != nil {
+		return "", err
+	}
+	runtimeStatePath := filepath.Join(runtimeRoot, "images", "state.json")
+	if _, err := os.Stat(runtimeStatePath); err == nil {
+		return "image", nil
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
 
