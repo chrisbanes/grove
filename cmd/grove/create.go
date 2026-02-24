@@ -82,6 +82,13 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 		// Expand workspace dir
 		projectName := getProjectName(goldenRoot)
 		cfg.WorkspaceDir = config.ExpandWorkspaceDir(cfg.WorkspaceDir, projectName)
+		cfg.StateDir = config.ExpandStateDir(cfg.StateDir)
+
+		if migrated, err := config.MigrateRuntimesToStateDir(cfg); err != nil {
+			return fmt.Errorf("migrating runtime state: %w", err)
+		} else if migrated {
+			fmt.Fprintf(os.Stderr, "Migrated runtime state to %s\n", cfg.StateDir)
+		}
 
 		// Check for uncommitted changes
 		force, _ := cmd.Flags().GetBool("force")

@@ -31,6 +31,7 @@ var statusCmd = &cobra.Command{
 
 		projectName := getProjectName(goldenRoot)
 		cfg.WorkspaceDir = config.ExpandWorkspaceDir(cfg.WorkspaceDir, projectName)
+		cfg.StateDir = config.ExpandStateDir(cfg.StateDir)
 
 		branch, _ := gitpkg.CurrentBranch(goldenRoot)
 		commit, _ := gitpkg.CurrentCommit(goldenRoot)
@@ -55,7 +56,8 @@ var statusCmd = &cobra.Command{
 
 		workspaces, _ := workspace.List(cfg)
 		fmt.Printf("Workspaces:  %d / %d (max)\n", len(workspaces), cfg.MaxWorkspaces)
-		fmt.Printf("Directory:   %s\n", cfg.WorkspaceDir)
+		fmt.Printf("Workspace dir: %s\n", cfg.WorkspaceDir)
+		fmt.Printf("State dir:     %s\n", cfg.StateDir)
 
 		return nil
 	},
