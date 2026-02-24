@@ -42,7 +42,7 @@ body:
       label: Steps to reproduce
       description: Minimal steps to reproduce the behavior.
       value: |
-        1. Run `grove init` in a repo
+        1. Run `grove config` in a repo
         2. Run `grove create --branch test`
         3. ...
     validations:
