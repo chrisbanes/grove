@@ -22,7 +22,7 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestDefaultConfig_WorkspaceDir(t *testing.T) {
 	cfg := config.DefaultConfig("myapp")
-	want := "~/.grove/{project}"
+	want := "~/grove-workspaces/{project}"
 	if cfg.WorkspaceDir != want {
 		t.Errorf("DefaultConfig().WorkspaceDir = %q, want %q", cfg.WorkspaceDir, want)
 	}
@@ -118,11 +118,11 @@ func TestExpandWorkspaceDir(t *testing.T) {
 }
 
 func TestExpandWorkspaceDir_Tilde(t *testing.T) {
-	result := config.ExpandWorkspaceDir("~/.grove/{project}", "myapp")
+	result := config.ExpandWorkspaceDir("~/grove-workspaces/{project}", "myapp")
 	if strings.HasPrefix(result, "~") {
 		t.Errorf("tilde not expanded: %s", result)
 	}
-	if !strings.HasSuffix(result, "/.grove/myapp") {
+	if !strings.HasSuffix(result, "/grove-workspaces/myapp") {
 		t.Errorf("unexpected expansion: %s", result)
 	}
 }
@@ -207,8 +207,9 @@ func TestImageRuntimeRoot_UsesRuntimeIDFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, ".grove", ".runtime-id"), []byte("abc123\n"), 0644); err != nil {
 		t.Fatalf("write runtime id: %v", err)
 	}
+	stateDir := filepath.Join(t.TempDir(), "state")
 	workspaceDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
-	cfg := &config.Config{WorkspaceDir: workspaceDir}
+	cfg := &config.Config{WorkspaceDir: workspaceDir, StateDir: stateDir}
 
 	rootA, err := config.ImageRuntimeRoot(repo, cfg)
 	if err != nil {
@@ -222,7 +223,7 @@ func TestImageRuntimeRoot_UsesRuntimeIDFile(t *testing.T) {
 	if rootA != rootB {
 		t.Fatalf("expected stable runtime root, got %q vs %q", rootA, rootB)
 	}
-	want := filepath.Join(filepath.Dir(workspaceDir), "My-Repo", "runtimes", "abc123")
+	want := filepath.Join(stateDir, "runtimes", "abc123")
 	if rootA != want {
 		t.Fatalf("expected runtime root %q, got %q", want, rootA)
 	}
@@ -234,7 +235,7 @@ func TestImageRuntimeRoot_WithoutRuntimeIDFallsBackToLegacyPath(t *testing.T) {
 		t.Fatalf("mkdir repo: %v", err)
 	}
 	workspaceDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
-	cfg := &config.Config{WorkspaceDir: workspaceDir}
+	cfg := &config.Config{WorkspaceDir: workspaceDir, StateDir: filepath.Join(t.TempDir(), "state")}
 
 	root, err := config.ImageRuntimeRoot(repo, cfg)
 	if err != nil {
@@ -251,9 +252,11 @@ func TestEnsureImageRuntimeRoot_AssignsRuntimeIDAndMigratesLegacyDir(t *testing.
 	if err := os.MkdirAll(filepath.Join(repo, ".grove"), 0755); err != nil {
 		t.Fatalf("mkdir .grove: %v", err)
 	}
+	stateDir := filepath.Join(t.TempDir(), "state")
 	workspaceDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
 	cfg := &config.Config{
 		WorkspaceDir:  workspaceDir,
+		StateDir:      stateDir,
 		CloneBackend:  "image",
 		MaxWorkspaces: 10,
 	}
@@ -280,7 +283,7 @@ func TestEnsureImageRuntimeRoot_AssignsRuntimeIDAndMigratesLegacyDir(t *testing.
 	if err != nil {
 		t.Fatalf("LoadRuntimeID() error = %v", err)
 	}
-	wantRoot := filepath.Join(filepath.Dir(workspaceDir), "My-Repo", "runtimes", runtimeID)
+	wantRoot := filepath.Join(stateDir, "runtimes", runtimeID)
 	if runtimeRoot != wantRoot {
 		t.Fatalf("expected runtime root %q, got %q", wantRoot, runtimeRoot)
 	}
@@ -308,6 +311,7 @@ func TestEnsureImageRuntimeRoot_DoesNotPersistExpandedWorkspaceDir(t *testing.T)
 	templateDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
 	savedCfg := &config.Config{
 		WorkspaceDir:  templateDir,
+		StateDir:      filepath.Join(t.TempDir(), "state"),
 		CloneBackend:  "image",
 		MaxWorkspaces: 10,
 	}
@@ -622,7 +626,7 @@ func TestLoadOrDefault_NoConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.WorkspaceDir != "~/.grove/{project}" {
+	if cfg.WorkspaceDir != "~/grove-workspaces/{project}" {
 		t.Errorf("expected default workspace dir, got %q", cfg.WorkspaceDir)
 	}
 	if cfg.CloneBackend != "cp" {
@@ -663,7 +667,7 @@ func TestLoadOrDefault_NoGroveDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.WorkspaceDir != "~/.grove/{project}" {
+	if cfg.WorkspaceDir != "~/grove-workspaces/{project}" {
 		t.Errorf("expected default workspace dir, got %q", cfg.WorkspaceDir)
 	}
 }
@@ -730,5 +734,135 @@ func TestEnsureMinimalGroveDir(t *testing.T) {
 
 	if err := config.EnsureMinimalGroveDir(dir); err != nil {
 		t.Fatalf("second call failed: %v", err)
+	}
+}
+
+func TestDefaultConfig_StateDir(t *testing.T) {
+	cfg := config.DefaultConfig("myapp")
+	if cfg.StateDir != "~/.grove" {
+		t.Errorf("DefaultConfig().StateDir = %q, want %q", cfg.StateDir, "~/.grove")
+	}
+}
+
+func TestDefaultConfig_WorkspaceDir_NewDefault(t *testing.T) {
+	cfg := config.DefaultConfig("myapp")
+	want := "~/grove-workspaces/{project}"
+	if cfg.WorkspaceDir != want {
+		t.Errorf("DefaultConfig().WorkspaceDir = %q, want %q", cfg.WorkspaceDir, want)
+	}
+}
+
+func TestSaveAndLoad_StateDir(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+
+	cfg := &config.Config{
+		WorkspaceDir:  "/tmp/workspaces",
+		StateDir:      "/custom/state",
+		MaxWorkspaces: 5,
+	}
+	if err := config.Save(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.StateDir != "/custom/state" {
+		t.Errorf("expected /custom/state, got %q", loaded.StateDir)
+	}
+}
+
+func TestExpandStateDir(t *testing.T) {
+	result := config.ExpandStateDir("~/.grove")
+	if strings.HasPrefix(result, "~") {
+		t.Errorf("tilde not expanded: %s", result)
+	}
+	if !strings.HasSuffix(result, "/.grove") {
+		t.Errorf("unexpected expansion: %s", result)
+	}
+}
+
+func TestExpandStateDir_Absolute(t *testing.T) {
+	result := config.ExpandStateDir("/custom/state")
+	if result != "/custom/state" {
+		t.Errorf("expected /custom/state, got %q", result)
+	}
+}
+
+func TestImageRuntimeRoot_UsesStateDir(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "My-Repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".grove"), 0755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".grove", ".runtime-id"), []byte("abc123\n"), 0644); err != nil {
+		t.Fatalf("write runtime id: %v", err)
+	}
+	stateDir := filepath.Join(t.TempDir(), "state")
+	cfg := &config.Config{
+		WorkspaceDir: filepath.Join(t.TempDir(), "workspaces"),
+		StateDir:     stateDir,
+	}
+
+	root, err := config.ImageRuntimeRoot(repo, cfg)
+	if err != nil {
+		t.Fatalf("ImageRuntimeRoot() error = %v", err)
+	}
+	want := filepath.Join(stateDir, "runtimes", "abc123")
+	if root != want {
+		t.Fatalf("expected runtime root %q, got %q", want, root)
+	}
+}
+
+func TestMigrateRuntimesToStateDir(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "myproject")
+	os.MkdirAll(filepath.Join(repo, ".grove"), 0755)
+
+	oldWorkspaceDir := filepath.Join(t.TempDir(), "old-workspaces")
+	runtimesDir := filepath.Join(oldWorkspaceDir, "runtimes", "abc123", "images")
+	os.MkdirAll(runtimesDir, 0755)
+	os.WriteFile(filepath.Join(runtimesDir, "state.json"), []byte("{}"), 0644)
+
+	stateDir := filepath.Join(t.TempDir(), "state")
+	cfg := &config.Config{
+		WorkspaceDir:  oldWorkspaceDir,
+		StateDir:      stateDir,
+		MaxWorkspaces: 10,
+	}
+
+	migrated, err := config.MigrateRuntimesToStateDir(cfg)
+	if err != nil {
+		t.Fatalf("MigrateRuntimesToStateDir() error = %v", err)
+	}
+	if !migrated {
+		t.Fatal("expected migration to occur")
+	}
+
+	newStateFile := filepath.Join(stateDir, "runtimes", "abc123", "images", "state.json")
+	if _, err := os.Stat(newStateFile); err != nil {
+		t.Fatalf("expected migrated state file at %s: %v", newStateFile, err)
+	}
+
+	if _, err := os.Stat(filepath.Join(oldWorkspaceDir, "runtimes")); !os.IsNotExist(err) {
+		t.Fatalf("expected old runtimes dir to be removed, err=%v", err)
+	}
+}
+
+func TestMigrateRuntimesToStateDir_NoRuntimes(t *testing.T) {
+	oldWorkspaceDir := filepath.Join(t.TempDir(), "workspaces")
+	os.MkdirAll(oldWorkspaceDir, 0755)
+
+	cfg := &config.Config{
+		WorkspaceDir: oldWorkspaceDir,
+		StateDir:     filepath.Join(t.TempDir(), "state"),
+	}
+
+	migrated, err := config.MigrateRuntimesToStateDir(cfg)
+	if err != nil {
+		t.Fatalf("MigrateRuntimesToStateDir() error = %v", err)
+	}
+	if migrated {
+		t.Fatal("expected no migration when no runtimes/ exists")
 	}
 }

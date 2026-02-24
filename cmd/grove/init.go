@@ -61,6 +61,9 @@ Can be re-run to update configuration.`,
 		imageSizeFlag, _ := cmd.Flags().GetInt("image-size-gb")
 		imageSizeSet := cmd.Flags().Changed("image-size-gb")
 
+		stateDirFlag, _ := cmd.Flags().GetString("state-dir")
+		stateDirSet := cmd.Flags().Changed("state-dir")
+
 		if backendSet {
 			switch backendFlag {
 			case "cp", "image":
@@ -74,6 +77,9 @@ Can be re-run to update configuration.`,
 		}
 		if warmupSet {
 			cfg.WarmupCommand = warmupFlag
+		}
+		if stateDirSet {
+			cfg.StateDir = stateDirFlag
 		}
 
 		// Interactive prompts for unset options
@@ -114,6 +120,25 @@ Can be re-run to update configuration.`,
 				}
 				if wsDir != "" {
 					cfg.WorkspaceDir = wsDir
+				}
+			}
+
+			if !stateDirSet {
+				defaultStateDir := cfg.StateDir
+				if defaultStateDir == "" {
+					defaultStateDir = "~/.grove"
+				}
+				stateDir := defaultStateDir
+				err := huh.NewInput().
+					Title("State directory").
+					Description("Internal state (runtime images, shadows)").
+					Value(&stateDir).
+					Run()
+				if err != nil {
+					return err
+				}
+				if stateDir != "" {
+					cfg.StateDir = stateDir
 				}
 			}
 
@@ -229,13 +254,15 @@ Can be re-run to update configuration.`,
 
 		fmt.Printf("Grove initialized at %s\n", absPath)
 		fmt.Printf("Workspace dir: %s\n", config.ExpandWorkspaceDir(cfg.WorkspaceDir, projectName))
+		fmt.Printf("State dir:     %s\n", config.ExpandStateDir(cfg.StateDir))
 		return nil
 	},
 }
 
 func init() {
 	initCmd.Flags().String("warmup-command", "", "Command to run for warming up build caches")
-	initCmd.Flags().String("workspace-dir", "", "Directory for workspaces (default: ~/.grove/{project})")
+	initCmd.Flags().String("workspace-dir", "", "Directory for workspaces (default: ~/grove-workspaces/{project})")
+	initCmd.Flags().String("state-dir", "", "Directory for grove internal state (default: ~/.grove)")
 	initCmd.Flags().String("backend", "", "Workspace backend: cp or image (experimental)")
 	initCmd.Flags().Int("image-size-gb", 200, "Base sparsebundle size in GB when using --backend image")
 	initCmd.Flags().Bool("progress", false, "Show progress output (default: auto-detect TTY)")

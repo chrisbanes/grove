@@ -38,6 +38,7 @@ var destroyCmd = &cobra.Command{
 
 		projectName := getProjectName(goldenRoot)
 		cfg.WorkspaceDir = config.ExpandWorkspaceDir(cfg.WorkspaceDir, projectName)
+		cfg.StateDir = config.ExpandStateDir(cfg.StateDir)
 
 		all, _ := cmd.Flags().GetBool("all")
 		push, _ := cmd.Flags().GetBool("push")

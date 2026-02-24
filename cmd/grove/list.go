@@ -33,6 +33,7 @@ var listCmd = &cobra.Command{
 
 		projectName := getProjectName(goldenRoot)
 		cfg.WorkspaceDir = config.ExpandWorkspaceDir(cfg.WorkspaceDir, projectName)
+		cfg.StateDir = config.ExpandStateDir(cfg.StateDir)
 
 		workspaces, err := workspace.List(cfg)
 		if err != nil {

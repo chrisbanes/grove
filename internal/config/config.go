@@ -31,6 +31,7 @@ backend.json
 type Config struct {
 	WarmupCommand string   `json:"warmup_command,omitempty"`
 	WorkspaceDir  string   `json:"workspace_dir"`
+	StateDir      string   `json:"state_dir"`
 	MaxWorkspaces int      `json:"max_workspaces"`
 	Exclude       []string `json:"exclude,omitempty"`
 	CloneBackend  string   `json:"clone_backend,omitempty"`
@@ -38,7 +39,8 @@ type Config struct {
 
 func DefaultConfig(projectName string) *Config {
 	return &Config{
-		WorkspaceDir:  "~/.grove/{project}",
+		WorkspaceDir:  "~/grove-workspaces/{project}",
+		StateDir:      "~/.grove",
 		MaxWorkspaces: 10,
 	}
 }
@@ -67,6 +69,9 @@ func Load(repoRoot string) (*Config, error) {
 	}
 	if cfg.MaxWorkspaces == 0 {
 		cfg.MaxWorkspaces = 10
+	}
+	if cfg.StateDir == "" {
+		cfg.StateDir = "~/.grove"
 	}
 	backend, err := normalizeCloneBackend(cfg.CloneBackend)
 	if err != nil {
@@ -114,6 +119,7 @@ func Save(repoRoot string, cfg *Config) error {
 	type persistedConfig struct {
 		WarmupCommand string   `json:"warmup_command,omitempty"`
 		WorkspaceDir  string   `json:"workspace_dir"`
+		StateDir      string   `json:"state_dir,omitempty"`
 		MaxWorkspaces int      `json:"max_workspaces"`
 		Exclude       []string `json:"exclude,omitempty"`
 		CloneBackend  string   `json:"clone_backend,omitempty"`
@@ -121,6 +127,7 @@ func Save(repoRoot string, cfg *Config) error {
 	data, err := json.MarshalIndent(&persistedConfig{
 		WarmupCommand: cfg.WarmupCommand,
 		WorkspaceDir:  cfg.WorkspaceDir,
+		StateDir:      cfg.StateDir,
 		MaxWorkspaces: cfg.MaxWorkspaces,
 		Exclude:       cfg.Exclude,
 		CloneBackend:  cfg.CloneBackend,
@@ -160,6 +167,49 @@ func ExpandWorkspaceDir(tmpl, projectName string) string {
 		}
 	}
 	return expanded
+}
+
+// ExpandStateDir expands ~ in the state directory path.
+func ExpandStateDir(stateDir string) string {
+	if strings.HasPrefix(stateDir, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, stateDir[2:])
+		}
+	}
+	return stateDir
+}
+
+// MigrateRuntimesToStateDir moves runtimes/ from workspace_dir to state_dir
+// if they exist under workspace_dir. Returns true if migration occurred.
+// Expects cfg.WorkspaceDir to already be expanded.
+func MigrateRuntimesToStateDir(cfg *Config) (bool, error) {
+	stateDir := ExpandStateDir(cfg.StateDir)
+	if !filepath.IsAbs(stateDir) {
+		var err error
+		stateDir, err = filepath.Abs(stateDir)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	oldRuntimes := filepath.Join(cfg.WorkspaceDir, "runtimes")
+	info, err := os.Stat(oldRuntimes)
+	if err != nil || !info.IsDir() {
+		return false, nil
+	}
+
+	newRuntimes := filepath.Join(stateDir, "runtimes")
+	if oldRuntimes == newRuntimes {
+		return false, nil
+	}
+
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		return false, err
+	}
+	if err := os.Rename(oldRuntimes, newRuntimes); err != nil {
+		return false, fmt.Errorf("migrating runtimes to state_dir: %w", err)
+	}
+	return true, nil
 }
 
 var nonAlnumPattern = regexp.MustCompile(`[^a-z0-9]+`)
@@ -202,14 +252,18 @@ func saveRuntimeID(repoRoot, runtimeID string) error {
 // ImageRuntimeRoot returns the directory that stores image backend runtime data
 // (base image, shadows, mount metadata) for this repository.
 func ImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
-	workspaceDir, err := expandedWorkspaceDirAbs(repoRoot, cfg.WorkspaceDir)
-	if err != nil {
-		return "", err
+	stateDir := ExpandStateDir(cfg.StateDir)
+	if !filepath.IsAbs(stateDir) {
+		var err error
+		stateDir, err = filepath.Abs(stateDir)
+		if err != nil {
+			return "", err
+		}
 	}
 	runtimeID, err := LoadRuntimeID(repoRoot)
 	switch {
 	case err == nil:
-		return runtimeRootForID(workspaceDir, runtimeID), nil
+		return runtimeRootForID(stateDir, runtimeID), nil
 	case !errors.Is(err, os.ErrNotExist):
 		return "", err
 	}
@@ -219,9 +273,13 @@ func ImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
 // EnsureImageRuntimeRoot ensures the runtime ID file is present and migrates any
 // legacy runtime path into the runtime-id-based path.
 func EnsureImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
-	workspaceDir, err := expandedWorkspaceDirAbs(repoRoot, cfg.WorkspaceDir)
-	if err != nil {
-		return "", err
+	stateDir := ExpandStateDir(cfg.StateDir)
+	if !filepath.IsAbs(stateDir) {
+		var err error
+		stateDir, err = filepath.Abs(stateDir)
+		if err != nil {
+			return "", err
+		}
 	}
 	runtimeID, err := LoadRuntimeID(repoRoot)
 	if err != nil {
@@ -236,7 +294,7 @@ func EnsureImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
 			return "", err
 		}
 	}
-	runtimeRoot := runtimeRootForID(workspaceDir, runtimeID)
+	runtimeRoot := runtimeRootForID(stateDir, runtimeID)
 	legacyRoot, err := legacyImageRuntimeRoot(repoRoot, cfg)
 	if err != nil {
 		return "", err
@@ -265,8 +323,8 @@ func EnsureImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
 	return runtimeRoot, nil
 }
 
-func runtimeRootForID(workspaceDir, runtimeID string) string {
-	return filepath.Join(workspaceDir, "runtimes", runtimeID)
+func runtimeRootForID(stateDir, runtimeID string) string {
+	return filepath.Join(stateDir, "runtimes", runtimeID)
 }
 
 func legacyImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
@@ -295,11 +353,13 @@ func legacyImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
 func BuildImageSyncExcludes(goldenRoot string, cfg *Config) ([]string, error) {
 	excludes := append([]string(nil), cfg.Exclude...)
 
-	workspaceDir, err := expandedWorkspaceDirAbs(goldenRoot, cfg.WorkspaceDir)
+	absGoldenRoot, err := filepath.Abs(goldenRoot)
 	if err != nil {
 		return nil, err
 	}
-	absGoldenRoot, err := filepath.Abs(goldenRoot)
+
+	// Exclude workspace_dir if inside repo
+	workspaceDir, err := expandedWorkspaceDirAbs(goldenRoot, cfg.WorkspaceDir)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +367,6 @@ func BuildImageSyncExcludes(goldenRoot string, cfg *Config) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	rel = filepath.Clean(rel)
 	if rel == "." {
 		return nil, fmt.Errorf("workspace_dir resolves to the repository root; choose a subdirectory or external path")
@@ -315,6 +374,24 @@ func BuildImageSyncExcludes(goldenRoot string, cfg *Config) ([]string, error) {
 	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		excludes = append(excludes, filepath.ToSlash(rel)+"/")
 	}
+
+	// Exclude state_dir if inside repo
+	stateDir := ExpandStateDir(cfg.StateDir)
+	if !filepath.IsAbs(stateDir) {
+		stateDir, err = filepath.Abs(stateDir)
+		if err != nil {
+			return nil, err
+		}
+	}
+	rel, err = filepath.Rel(absGoldenRoot, stateDir)
+	if err != nil {
+		return nil, err
+	}
+	rel = filepath.Clean(rel)
+	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "." {
+		excludes = append(excludes, filepath.ToSlash(rel)+"/")
+	}
+
 	return excludes, nil
 }
 
