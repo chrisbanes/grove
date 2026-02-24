@@ -179,6 +179,39 @@ func ExpandStateDir(stateDir string) string {
 	return stateDir
 }
 
+// MigrateRuntimesToStateDir moves runtimes/ from workspace_dir to state_dir
+// if they exist under workspace_dir. Returns true if migration occurred.
+// Expects cfg.WorkspaceDir to already be expanded.
+func MigrateRuntimesToStateDir(cfg *Config) (bool, error) {
+	stateDir := ExpandStateDir(cfg.StateDir)
+	if !filepath.IsAbs(stateDir) {
+		var err error
+		stateDir, err = filepath.Abs(stateDir)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	oldRuntimes := filepath.Join(cfg.WorkspaceDir, "runtimes")
+	info, err := os.Stat(oldRuntimes)
+	if err != nil || !info.IsDir() {
+		return false, nil
+	}
+
+	newRuntimes := filepath.Join(stateDir, "runtimes")
+	if oldRuntimes == newRuntimes {
+		return false, nil
+	}
+
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		return false, err
+	}
+	if err := os.Rename(oldRuntimes, newRuntimes); err != nil {
+		return false, fmt.Errorf("migrating runtimes to state_dir: %w", err)
+	}
+	return true, nil
+}
+
 var nonAlnumPattern = regexp.MustCompile(`[^a-z0-9]+`)
 var runtimeIDPattern = regexp.MustCompile(`^[a-z0-9]+$`)
 

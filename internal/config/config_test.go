@@ -814,3 +814,55 @@ func TestImageRuntimeRoot_UsesStateDir(t *testing.T) {
 		t.Fatalf("expected runtime root %q, got %q", want, root)
 	}
 }
+
+func TestMigrateRuntimesToStateDir(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "myproject")
+	os.MkdirAll(filepath.Join(repo, ".grove"), 0755)
+
+	oldWorkspaceDir := filepath.Join(t.TempDir(), "old-workspaces")
+	runtimesDir := filepath.Join(oldWorkspaceDir, "runtimes", "abc123", "images")
+	os.MkdirAll(runtimesDir, 0755)
+	os.WriteFile(filepath.Join(runtimesDir, "state.json"), []byte("{}"), 0644)
+
+	stateDir := filepath.Join(t.TempDir(), "state")
+	cfg := &config.Config{
+		WorkspaceDir:  oldWorkspaceDir,
+		StateDir:      stateDir,
+		MaxWorkspaces: 10,
+	}
+
+	migrated, err := config.MigrateRuntimesToStateDir(cfg)
+	if err != nil {
+		t.Fatalf("MigrateRuntimesToStateDir() error = %v", err)
+	}
+	if !migrated {
+		t.Fatal("expected migration to occur")
+	}
+
+	newStateFile := filepath.Join(stateDir, "runtimes", "abc123", "images", "state.json")
+	if _, err := os.Stat(newStateFile); err != nil {
+		t.Fatalf("expected migrated state file at %s: %v", newStateFile, err)
+	}
+
+	if _, err := os.Stat(filepath.Join(oldWorkspaceDir, "runtimes")); !os.IsNotExist(err) {
+		t.Fatalf("expected old runtimes dir to be removed, err=%v", err)
+	}
+}
+
+func TestMigrateRuntimesToStateDir_NoRuntimes(t *testing.T) {
+	oldWorkspaceDir := filepath.Join(t.TempDir(), "workspaces")
+	os.MkdirAll(oldWorkspaceDir, 0755)
+
+	cfg := &config.Config{
+		WorkspaceDir: oldWorkspaceDir,
+		StateDir:     filepath.Join(t.TempDir(), "state"),
+	}
+
+	migrated, err := config.MigrateRuntimesToStateDir(cfg)
+	if err != nil {
+		t.Fatalf("MigrateRuntimesToStateDir() error = %v", err)
+	}
+	if migrated {
+		t.Fatal("expected no migration when no runtimes/ exists")
+	}
+}
