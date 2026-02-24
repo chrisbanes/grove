@@ -26,7 +26,7 @@ func (imageBackend) Name() string {
 }
 
 func (imageBackend) CreateWorkspace(goldenRoot string, cfg *config.Config, opts CreateOptions) (*workspace.Info, error) {
-	runtimeRoot, err := config.ImageRuntimeRoot(goldenRoot, cfg)
+	runtimeRoot, err := config.EnsureImageRuntimeRoot(goldenRoot, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolving image runtime root: %w", err)
 	}
@@ -87,7 +87,7 @@ func (imageBackend) RefreshBase(goldenRoot, commit string, excludes []string, on
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
-	runtimeRoot, err := config.ImageRuntimeRoot(goldenRoot, cfg)
+	runtimeRoot, err := config.EnsureImageRuntimeRoot(goldenRoot, cfg)
 	if err != nil {
 		return fmt.Errorf("resolving image runtime root: %w", err)
 	}

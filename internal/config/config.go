@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -36,6 +37,7 @@ type Config struct {
 	MaxWorkspaces int      `json:"max_workspaces"`
 	Exclude       []string `json:"exclude,omitempty"`
 	CloneBackend  string   `json:"clone_backend,omitempty"`
+	RuntimeID     string   `json:"runtime_id,omitempty"`
 }
 
 func DefaultConfig(projectName string) *Config {
@@ -68,6 +70,9 @@ func Load(repoRoot string) (*Config, error) {
 		return nil, err
 	}
 	cfg.CloneBackend = backend
+	if cfg.RuntimeID != "" && !runtimeIDPattern.MatchString(cfg.RuntimeID) {
+		return nil, fmt.Errorf("invalid runtime_id %q: expected lowercase letters and numbers", cfg.RuntimeID)
+	}
 	return &cfg, nil
 }
 
@@ -110,10 +115,92 @@ func ExpandWorkspaceDir(tmpl, projectName string) string {
 }
 
 var nonAlnumPattern = regexp.MustCompile(`[^a-z0-9]+`)
+var runtimeIDPattern = regexp.MustCompile(`^[a-z0-9]+$`)
+
+func GenerateRuntimeID() (string, error) {
+	var b [6]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
+}
 
 // ImageRuntimeRoot returns the directory that stores image backend runtime data
 // (base image, shadows, mount metadata) for this repository.
 func ImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
+	workspaceDir, err := expandedWorkspaceDirAbs(repoRoot, cfg.WorkspaceDir)
+	if err != nil {
+		return "", err
+	}
+	if cfg.RuntimeID != "" {
+		return runtimeRootForID(workspaceDir, cfg.RuntimeID), nil
+	}
+	return legacyImageRuntimeRoot(repoRoot, cfg)
+}
+
+// EnsureImageRuntimeRoot ensures runtime_id is present and migrates any legacy
+// runtime path into the runtime_id-based path.
+func EnsureImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
+	workspaceDir, err := expandedWorkspaceDirAbs(repoRoot, cfg.WorkspaceDir)
+	if err != nil {
+		return "", err
+	}
+	if cfg.RuntimeID == "" {
+		runtimeID, err := GenerateRuntimeID()
+		if err != nil {
+			return "", err
+		}
+		persistedCfg, loadErr := Load(repoRoot)
+		if loadErr == nil {
+			if persistedCfg.RuntimeID != "" {
+				cfg.RuntimeID = persistedCfg.RuntimeID
+			} else {
+				persistedCfg.RuntimeID = runtimeID
+				if err := Save(repoRoot, persistedCfg); err != nil {
+					return "", err
+				}
+				cfg.RuntimeID = runtimeID
+			}
+		} else if errors.Is(loadErr, os.ErrNotExist) {
+			cfg.RuntimeID = runtimeID
+		} else {
+			return "", loadErr
+		}
+	}
+	runtimeRoot := runtimeRootForID(workspaceDir, cfg.RuntimeID)
+	legacyRoot, err := legacyImageRuntimeRoot(repoRoot, cfg)
+	if err != nil {
+		return "", err
+	}
+	if runtimeRoot == legacyRoot {
+		return runtimeRoot, nil
+	}
+	legacyInfo, err := os.Stat(legacyRoot)
+	switch {
+	case err == nil && legacyInfo.IsDir():
+		if _, statErr := os.Stat(runtimeRoot); errors.Is(statErr, os.ErrNotExist) {
+			if err := os.MkdirAll(filepath.Dir(runtimeRoot), 0755); err != nil {
+				return "", err
+			}
+			if err := os.Rename(legacyRoot, runtimeRoot); err != nil {
+				return "", err
+			}
+		} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return "", statErr
+		}
+	case errors.Is(err, os.ErrNotExist):
+		// No legacy runtime to migrate.
+	case err != nil:
+		return "", err
+	}
+	return runtimeRoot, nil
+}
+
+func runtimeRootForID(workspaceDir, runtimeID string) string {
+	return filepath.Join(workspaceDir, "runtimes", runtimeID)
+}
+
+func legacyImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
 	workspaceDir, err := expandedWorkspaceDirAbs(repoRoot, cfg.WorkspaceDir)
 	if err != nil {
 		return "", err
@@ -212,9 +299,14 @@ func EnsureBackendCompatible(repoRoot string, cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	imageStatePath := filepath.Join(runtimeRoot, "images", "state.json")
-	_, imageStateErr := os.Stat(imageStatePath)
-	hasImageState := imageStateErr == nil
+	hasImageState := imageStateExists(runtimeRoot)
+	legacyRoot, err := legacyImageRuntimeRoot(repoRoot, cfg)
+	if err != nil {
+		return err
+	}
+	if legacyRoot != runtimeRoot {
+		hasImageState = hasImageState || imageStateExists(legacyRoot)
+	}
 
 	switch cfg.CloneBackend {
 	case "cp":
@@ -232,6 +324,11 @@ func EnsureBackendCompatible(repoRoot string, cfg *Config) error {
 	default:
 		return fmt.Errorf("invalid clone_backend %q: expected cp or image", cfg.CloneBackend)
 	}
+}
+
+func imageStateExists(runtimeRoot string) bool {
+	_, err := os.Stat(filepath.Join(runtimeRoot, "images", "state.json"))
+	return err == nil
 }
 
 func LoadBackendState(repoRoot string) (string, error) {

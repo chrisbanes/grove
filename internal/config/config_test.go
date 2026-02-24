@@ -160,13 +160,13 @@ func TestBuildImageSyncExcludes_ErrorsWhenWorkspaceDirIsRepoRoot(t *testing.T) {
 	}
 }
 
-func TestImageRuntimeRoot_UsesWorkspaceDirAndIsStable(t *testing.T) {
+func TestImageRuntimeRoot_UsesRuntimeID(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "My-Repo")
 	if err := os.MkdirAll(repo, 0755); err != nil {
 		t.Fatalf("mkdir repo: %v", err)
 	}
 	workspaceDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
-	cfg := &config.Config{WorkspaceDir: workspaceDir}
+	cfg := &config.Config{WorkspaceDir: workspaceDir, RuntimeID: "abc123"}
 
 	rootA, err := config.ImageRuntimeRoot(repo, cfg)
 	if err != nil {
@@ -180,9 +180,117 @@ func TestImageRuntimeRoot_UsesWorkspaceDirAndIsStable(t *testing.T) {
 	if rootA != rootB {
 		t.Fatalf("expected stable runtime root, got %q vs %q", rootA, rootB)
 	}
+	want := filepath.Join(filepath.Dir(workspaceDir), "My-Repo", "runtimes", "abc123")
+	if rootA != want {
+		t.Fatalf("expected runtime root %q, got %q", want, rootA)
+	}
+}
+
+func TestImageRuntimeRoot_WithoutRuntimeIDFallsBackToLegacyPath(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "My-Repo")
+	if err := os.MkdirAll(repo, 0755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	workspaceDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
+	cfg := &config.Config{WorkspaceDir: workspaceDir}
+
+	root, err := config.ImageRuntimeRoot(repo, cfg)
+	if err != nil {
+		t.Fatalf("ImageRuntimeRoot() error = %v", err)
+	}
 	prefix := filepath.Join(filepath.Dir(workspaceDir), "My-Repo", ".grove-runtime") + string(filepath.Separator)
-	if !strings.HasPrefix(rootA, prefix) {
-		t.Fatalf("expected runtime root under %q, got %q", prefix, rootA)
+	if !strings.HasPrefix(root, prefix) {
+		t.Fatalf("expected legacy runtime root under %q, got %q", prefix, root)
+	}
+}
+
+func TestEnsureImageRuntimeRoot_AssignsRuntimeIDAndMigratesLegacyDir(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "My-Repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".grove"), 0755); err != nil {
+		t.Fatalf("mkdir .grove: %v", err)
+	}
+	workspaceDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
+	cfg := &config.Config{
+		WorkspaceDir:  workspaceDir,
+		CloneBackend:  "image",
+		MaxWorkspaces: 10,
+	}
+	if err := config.Save(repo, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	legacyRoot, err := config.ImageRuntimeRoot(repo, cfg)
+	if err != nil {
+		t.Fatalf("ImageRuntimeRoot() legacy error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(legacyRoot, "images"), 0755); err != nil {
+		t.Fatalf("mkdir legacy images: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyRoot, "images", "state.json"), []byte("{}"), 0644); err != nil {
+		t.Fatalf("write legacy state: %v", err)
+	}
+
+	runtimeRoot, err := config.EnsureImageRuntimeRoot(repo, cfg)
+	if err != nil {
+		t.Fatalf("EnsureImageRuntimeRoot() error = %v", err)
+	}
+	if cfg.RuntimeID == "" {
+		t.Fatal("expected runtime_id to be generated")
+	}
+	wantRoot := filepath.Join(filepath.Dir(workspaceDir), "My-Repo", "runtimes", cfg.RuntimeID)
+	if runtimeRoot != wantRoot {
+		t.Fatalf("expected runtime root %q, got %q", wantRoot, runtimeRoot)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeRoot, "images", "state.json")); err != nil {
+		t.Fatalf("expected migrated state at new runtime root: %v", err)
+	}
+	if _, err := os.Stat(legacyRoot); !os.IsNotExist(err) {
+		t.Fatalf("expected legacy root moved away, got err=%v", err)
+	}
+
+	loaded, err := config.Load(repo)
+	if err != nil {
+		t.Fatalf("Load() after ensure error = %v", err)
+	}
+	if loaded.RuntimeID != cfg.RuntimeID {
+		t.Fatalf("expected runtime_id persisted (%q), got %q", cfg.RuntimeID, loaded.RuntimeID)
+	}
+}
+
+func TestEnsureImageRuntimeRoot_DoesNotPersistExpandedWorkspaceDir(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "My-Repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".grove"), 0755); err != nil {
+		t.Fatalf("mkdir .grove: %v", err)
+	}
+	templateDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
+	savedCfg := &config.Config{
+		WorkspaceDir:  templateDir,
+		CloneBackend:  "image",
+		MaxWorkspaces: 10,
+	}
+	if err := config.Save(repo, savedCfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loadedCfg, err := config.Load(repo)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	loadedCfg.WorkspaceDir = config.ExpandWorkspaceDir(templateDir, "My-Repo")
+
+	if _, err := config.EnsureImageRuntimeRoot(repo, loadedCfg); err != nil {
+		t.Fatalf("EnsureImageRuntimeRoot() error = %v", err)
+	}
+
+	reloadedCfg, err := config.Load(repo)
+	if err != nil {
+		t.Fatalf("Load() after ensure error = %v", err)
+	}
+	if reloadedCfg.WorkspaceDir != templateDir {
+		t.Fatalf("expected workspace_dir to remain template %q, got %q", templateDir, reloadedCfg.WorkspaceDir)
+	}
+	if reloadedCfg.RuntimeID == "" {
+		t.Fatal("expected runtime_id to be persisted")
 	}
 }
 

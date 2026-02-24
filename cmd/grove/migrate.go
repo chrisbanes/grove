@@ -70,7 +70,7 @@ var migrateCmd = &cobra.Command{
 
 		switch to {
 		case "image":
-			runtimeRoot, err := config.ImageRuntimeRoot(goldenRoot, cfg)
+			runtimeRoot, err := config.EnsureImageRuntimeRoot(goldenRoot, cfg)
 			if err != nil {
 				return fmt.Errorf("resolving image runtime root: %w", err)
 			}
@@ -97,7 +97,7 @@ var migrateCmd = &cobra.Command{
 				}
 			}
 		case "cp":
-			runtimeRoot, err := config.ImageRuntimeRoot(goldenRoot, cfg)
+			runtimeRoot, err := config.EnsureImageRuntimeRoot(goldenRoot, cfg)
 			if err != nil {
 				return fmt.Errorf("resolving image runtime root: %w", err)
 			}

@@ -10,7 +10,7 @@ import (
 )
 
 func destroyWorkspace(goldenRoot string, cfg *config.Config, id string) error {
-	runtimeRoot, err := config.ImageRuntimeRoot(goldenRoot, cfg)
+	runtimeRoot, err := config.EnsureImageRuntimeRoot(goldenRoot, cfg)
 	if err != nil {
 		return err
 	}
