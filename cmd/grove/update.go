@@ -8,6 +8,7 @@ import (
 	"github.com/chrisbanes/grove/internal/backend"
 	"github.com/chrisbanes/grove/internal/config"
 	gitpkg "github.com/chrisbanes/grove/internal/git"
+	"github.com/chrisbanes/grove/internal/termio"
 	"github.com/spf13/cobra"
 )
 
@@ -54,9 +55,7 @@ var updateCmd = &cobra.Command{
 			fmt.Printf("Running warmup: %s\n", cfg.WarmupCommand)
 			warmup := exec.Command("sh", "-c", cfg.WarmupCommand)
 			warmup.Dir = goldenRoot
-			warmup.Stdout = os.Stdout
-			warmup.Stderr = os.Stderr
-			if err := warmup.Run(); err != nil {
+			if err := termio.RunInteractive(warmup); err != nil {
 				return fmt.Errorf("warmup command failed: %w", err)
 			}
 		}
