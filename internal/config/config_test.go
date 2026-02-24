@@ -22,7 +22,7 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestDefaultConfig_WorkspaceDir(t *testing.T) {
 	cfg := config.DefaultConfig("myapp")
-	want := "~/.grove/{project}"
+	want := "~/grove-workspaces/{project}"
 	if cfg.WorkspaceDir != want {
 		t.Errorf("DefaultConfig().WorkspaceDir = %q, want %q", cfg.WorkspaceDir, want)
 	}
@@ -118,11 +118,11 @@ func TestExpandWorkspaceDir(t *testing.T) {
 }
 
 func TestExpandWorkspaceDir_Tilde(t *testing.T) {
-	result := config.ExpandWorkspaceDir("~/.grove/{project}", "myapp")
+	result := config.ExpandWorkspaceDir("~/grove-workspaces/{project}", "myapp")
 	if strings.HasPrefix(result, "~") {
 		t.Errorf("tilde not expanded: %s", result)
 	}
-	if !strings.HasSuffix(result, "/.grove/myapp") {
+	if !strings.HasSuffix(result, "/grove-workspaces/myapp") {
 		t.Errorf("unexpected expansion: %s", result)
 	}
 }
@@ -622,7 +622,7 @@ func TestLoadOrDefault_NoConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.WorkspaceDir != "~/.grove/{project}" {
+	if cfg.WorkspaceDir != "~/grove-workspaces/{project}" {
 		t.Errorf("expected default workspace dir, got %q", cfg.WorkspaceDir)
 	}
 	if cfg.CloneBackend != "cp" {
@@ -663,7 +663,7 @@ func TestLoadOrDefault_NoGroveDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.WorkspaceDir != "~/.grove/{project}" {
+	if cfg.WorkspaceDir != "~/grove-workspaces/{project}" {
 		t.Errorf("expected default workspace dir, got %q", cfg.WorkspaceDir)
 	}
 }
@@ -730,5 +730,42 @@ func TestEnsureMinimalGroveDir(t *testing.T) {
 
 	if err := config.EnsureMinimalGroveDir(dir); err != nil {
 		t.Fatalf("second call failed: %v", err)
+	}
+}
+
+func TestDefaultConfig_StateDir(t *testing.T) {
+	cfg := config.DefaultConfig("myapp")
+	if cfg.StateDir != "~/.grove" {
+		t.Errorf("DefaultConfig().StateDir = %q, want %q", cfg.StateDir, "~/.grove")
+	}
+}
+
+func TestDefaultConfig_WorkspaceDir_NewDefault(t *testing.T) {
+	cfg := config.DefaultConfig("myapp")
+	want := "~/grove-workspaces/{project}"
+	if cfg.WorkspaceDir != want {
+		t.Errorf("DefaultConfig().WorkspaceDir = %q, want %q", cfg.WorkspaceDir, want)
+	}
+}
+
+func TestSaveAndLoad_StateDir(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+
+	cfg := &config.Config{
+		WorkspaceDir:  "/tmp/workspaces",
+		StateDir:      "/custom/state",
+		MaxWorkspaces: 5,
+	}
+	if err := config.Save(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.StateDir != "/custom/state" {
+		t.Errorf("expected /custom/state, got %q", loaded.StateDir)
 	}
 }

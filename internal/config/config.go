@@ -31,6 +31,7 @@ backend.json
 type Config struct {
 	WarmupCommand string   `json:"warmup_command,omitempty"`
 	WorkspaceDir  string   `json:"workspace_dir"`
+	StateDir      string   `json:"state_dir"`
 	MaxWorkspaces int      `json:"max_workspaces"`
 	Exclude       []string `json:"exclude,omitempty"`
 	CloneBackend  string   `json:"clone_backend,omitempty"`
@@ -38,7 +39,8 @@ type Config struct {
 
 func DefaultConfig(projectName string) *Config {
 	return &Config{
-		WorkspaceDir:  "~/.grove/{project}",
+		WorkspaceDir:  "~/grove-workspaces/{project}",
+		StateDir:      "~/.grove",
 		MaxWorkspaces: 10,
 	}
 }
@@ -67,6 +69,9 @@ func Load(repoRoot string) (*Config, error) {
 	}
 	if cfg.MaxWorkspaces == 0 {
 		cfg.MaxWorkspaces = 10
+	}
+	if cfg.StateDir == "" {
+		cfg.StateDir = "~/.grove"
 	}
 	backend, err := normalizeCloneBackend(cfg.CloneBackend)
 	if err != nil {
@@ -114,6 +119,7 @@ func Save(repoRoot string, cfg *Config) error {
 	type persistedConfig struct {
 		WarmupCommand string   `json:"warmup_command,omitempty"`
 		WorkspaceDir  string   `json:"workspace_dir"`
+		StateDir      string   `json:"state_dir,omitempty"`
 		MaxWorkspaces int      `json:"max_workspaces"`
 		Exclude       []string `json:"exclude,omitempty"`
 		CloneBackend  string   `json:"clone_backend,omitempty"`
@@ -121,6 +127,7 @@ func Save(repoRoot string, cfg *Config) error {
 	data, err := json.MarshalIndent(&persistedConfig{
 		WarmupCommand: cfg.WarmupCommand,
 		WorkspaceDir:  cfg.WorkspaceDir,
+		StateDir:      cfg.StateDir,
 		MaxWorkspaces: cfg.MaxWorkspaces,
 		Exclude:       cfg.Exclude,
 		CloneBackend:  cfg.CloneBackend,
