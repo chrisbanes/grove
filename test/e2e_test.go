@@ -112,6 +112,59 @@ func groveExpectErr(t *testing.T, binary, dir string, args ...string) string {
 	return string(out)
 }
 
+func TestCreateWithoutInit(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+
+	// Skip grove init entirely — go straight to create
+	out := grove(t, binary, repo, "create", "--json")
+	var info workspace.Info
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		t.Fatalf("invalid JSON output: %s\n%s", err, out)
+	}
+	if info.ID == "" || info.Path == "" {
+		t.Fatal("missing ID or Path in output")
+	}
+
+	// Verify workspace has golden copy content
+	data, err := os.ReadFile(filepath.Join(info.Path, "main.go"))
+	if err != nil {
+		t.Fatal("main.go not in workspace")
+	}
+	if string(data) != "package main\n" {
+		t.Error("main.go content mismatch")
+	}
+
+	// Verify .grove/ was lazily created in golden copy
+	if _, err := os.Stat(filepath.Join(repo, ".grove")); err != nil {
+		t.Error(".grove/ not created lazily")
+	}
+
+	// No config.json should exist (that requires explicit init)
+	if _, err := os.Stat(filepath.Join(repo, ".grove", "config.json")); err == nil {
+		t.Error("config.json should not exist without explicit init")
+	}
+
+	// List should work
+	listOut := grove(t, binary, repo, "list")
+	if !strings.Contains(listOut, info.ID) {
+		t.Errorf("list should show workspace, got: %s", listOut)
+	}
+
+	// Status should work
+	grove(t, binary, repo, "status")
+
+	// Destroy should work
+	grove(t, binary, repo, "destroy", info.ID)
+	if _, err := os.Stat(info.Path); !os.IsNotExist(err) {
+		t.Error("workspace not cleaned up")
+	}
+}
+
 func TestCreate_CloneMetadataSignal(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("APFS tests only run on macOS")
@@ -496,6 +549,21 @@ func TestInitEdgeCases(t *testing.T) {
 		out := grove(t, binary, repo, "init")
 		if !strings.Contains(out, "Grove initialized") {
 			t.Errorf("expected 'Grove initialized' on re-init, got: %s", out)
+		}
+	})
+
+	t.Run("reinit-updates-config", func(t *testing.T) {
+		repo := setupTestRepo(t)
+		grove(t, binary, repo, "init", "--defaults")
+		// Re-running init should succeed (not error)
+		grove(t, binary, repo, "init", "--defaults", "--warmup-command", "echo updated")
+
+		cfg, err := config.Load(repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.WarmupCommand != "echo updated" {
+			t.Errorf("expected updated warmup command, got %q", cfg.WarmupCommand)
 		}
 	})
 
