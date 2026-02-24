@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/chrisbanes/grove/internal/termio"
 )
 
 // Run executes the named hook from the .grove/hooks/ directory within
@@ -29,10 +31,8 @@ func Run(repoRoot, hookName string) error {
 
 	cmd := exec.Command(hookPath)
 	cmd.Dir = repoRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	if err := termio.RunInteractive(cmd); err != nil {
 		return fmt.Errorf("hook %s failed: %w", hookName, err)
 	}
 	return nil
