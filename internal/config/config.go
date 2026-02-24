@@ -22,13 +22,7 @@ const (
 	runtimeIDFile = ".runtime-id"
 )
 
-const groveGitignoreContents = `# Grove workspace marker and legacy runtime state (safe to ignore)
-images/base.sparsebundle/
-images/state.json
-images/init-in-progress
-shadows/
-workspaces/
-mnt/
+const groveGitignoreContents = `# Grove local metadata (safe to ignore)
 workspace.json
 .runtime-id
 `

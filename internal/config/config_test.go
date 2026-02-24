@@ -562,12 +562,6 @@ func TestEnsureGroveGitignore_CreatesDefaultFile(t *testing.T) {
 	}
 	content := string(data)
 	for _, pattern := range []string{
-		"images/base.sparsebundle/",
-		"images/state.json",
-		"images/init-in-progress",
-		"shadows/",
-		"workspaces/",
-		"mnt/",
 		"workspace.json",
 		".runtime-id",
 	} {
