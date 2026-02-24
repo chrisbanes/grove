@@ -87,6 +87,7 @@ func (imageBackend) RefreshBase(goldenRoot, commit string, excludes []string, on
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
+	cfg.StateDir = config.ExpandStateDir(cfg.StateDir)
 	runtimeRoot, err := config.EnsureImageRuntimeRoot(goldenRoot, cfg)
 	if err != nil {
 		return fmt.Errorf("resolving image runtime root: %w", err)
