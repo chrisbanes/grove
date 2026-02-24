@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +17,14 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if cfg.WorkspaceDir == "" {
 		t.Error("expected non-empty workspace_dir")
+	}
+}
+
+func TestDefaultConfig_WorkspaceDir(t *testing.T) {
+	cfg := config.DefaultConfig("myapp")
+	want := "~/.grove/{project}"
+	if cfg.WorkspaceDir != want {
+		t.Errorf("DefaultConfig().WorkspaceDir = %q, want %q", cfg.WorkspaceDir, want)
 	}
 }
 
@@ -105,6 +114,16 @@ func TestExpandWorkspaceDir(t *testing.T) {
 	}
 	if filepath.Base(expanded) != "myapp" {
 		t.Errorf("expected 'myapp' in path, got %q", expanded)
+	}
+}
+
+func TestExpandWorkspaceDir_Tilde(t *testing.T) {
+	result := config.ExpandWorkspaceDir("~/.grove/{project}", "myapp")
+	if strings.HasPrefix(result, "~") {
+		t.Errorf("tilde not expanded: %s", result)
+	}
+	if !strings.HasSuffix(result, "/.grove/myapp") {
+		t.Errorf("unexpected expansion: %s", result)
 	}
 }
 
@@ -592,5 +611,124 @@ func TestEnsureGroveGitignore_DoesNotOverwriteExisting(t *testing.T) {
 	}
 	if string(data) != "custom\n" {
 		t.Fatalf("expected existing .gitignore to remain unchanged, got:\n%s", string(data))
+	}
+}
+
+func TestLoadOrDefault_NoConfig(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, config.GroveDirName), 0755)
+
+	cfg, err := config.LoadOrDefault(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.WorkspaceDir != "~/.grove/{project}" {
+		t.Errorf("expected default workspace dir, got %q", cfg.WorkspaceDir)
+	}
+	if cfg.CloneBackend != "cp" {
+		t.Errorf("expected cp backend, got %q", cfg.CloneBackend)
+	}
+	if cfg.MaxWorkspaces != 10 {
+		t.Errorf("expected 10 max workspaces, got %d", cfg.MaxWorkspaces)
+	}
+}
+
+func TestLoadOrDefault_WithConfig(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, config.GroveDirName), 0755)
+	cfg := &config.Config{
+		WorkspaceDir:  "/custom/path",
+		MaxWorkspaces: 5,
+		CloneBackend:  "image",
+	}
+	if err := config.Save(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := config.LoadOrDefault(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if loaded.WorkspaceDir != "/custom/path" {
+		t.Errorf("expected /custom/path, got %q", loaded.WorkspaceDir)
+	}
+	if loaded.CloneBackend != "image" {
+		t.Errorf("expected image, got %q", loaded.CloneBackend)
+	}
+}
+
+func TestLoadOrDefault_NoGroveDir(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := config.LoadOrDefault(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.WorkspaceDir != "~/.grove/{project}" {
+		t.Errorf("expected default workspace dir, got %q", cfg.WorkspaceDir)
+	}
+}
+
+func TestFindGroveRoot_GitFallback(t *testing.T) {
+	dir := t.TempDir()
+	cmd := exec.Command("git", "init", dir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %s\n%s", err, out)
+	}
+
+	root, err := config.FindGroveRoot(dir)
+	if err != nil {
+		t.Fatalf("expected git fallback, got error: %v", err)
+	}
+	if root != dir {
+		t.Errorf("expected %s, got %s", dir, root)
+	}
+}
+
+func TestFindGroveRoot_PrefersGroveDirOverGit(t *testing.T) {
+	dir := t.TempDir()
+	cmd := exec.Command("git", "init", dir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %s\n%s", err, out)
+	}
+	os.MkdirAll(filepath.Join(dir, config.GroveDirName), 0755)
+
+	root, err := config.FindGroveRoot(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if root != dir {
+		t.Errorf("expected %s, got %s", dir, root)
+	}
+}
+
+func TestFindGroveRoot_NoGitNoGrove(t *testing.T) {
+	dir := t.TempDir()
+	_, err := config.FindGroveRoot(dir)
+	if err == nil {
+		t.Fatal("expected error for non-git, non-grove directory")
+	}
+}
+
+func TestEnsureMinimalGroveDir(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := config.EnsureMinimalGroveDir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, config.GroveDirName)); err != nil {
+		t.Error(".grove/ not created")
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, config.GroveDirName, ".gitignore"))
+	if err != nil {
+		t.Fatal(".grove/.gitignore not created")
+	}
+	if !strings.Contains(string(data), "workspace.json") {
+		t.Error(".gitignore missing workspace.json entry")
+	}
+
+	if err := config.EnsureMinimalGroveDir(dir); err != nil {
+		t.Fatalf("second call failed: %v", err)
 	}
 }

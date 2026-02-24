@@ -37,9 +37,15 @@ var migrateCmd = &cobra.Command{
 			return fmt.Errorf("cannot migrate backend from inside a workspace.\nRun this from the golden copy instead")
 		}
 
-		cfg, err := config.Load(goldenRoot)
+		cfg, err := config.LoadOrDefault(goldenRoot)
 		if err != nil {
 			return err
+		}
+
+		// Migrate requires explicit init since it changes backend config
+		cfgPath := filepath.Join(goldenRoot, config.GroveDirName, config.ConfigFile)
+		if _, err := os.Stat(cfgPath); err != nil {
+			return fmt.Errorf("grove not initialized. Run `grove init` first to configure a backend before migrating")
 		}
 
 		to, _ := cmd.Flags().GetString("to")

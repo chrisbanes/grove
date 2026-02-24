@@ -61,10 +61,16 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 			return fmt.Errorf("cannot create a workspace from inside another workspace.\nRun this from the golden copy instead")
 		}
 
-		cfg, err := config.Load(goldenRoot)
+		cfg, err := config.LoadOrDefault(goldenRoot)
 		if err != nil {
 			return err
 		}
+
+		// Ensure .grove/ exists for runtime files
+		if err := config.EnsureMinimalGroveDir(goldenRoot); err != nil {
+			return err
+		}
+
 		if err := config.EnsureBackendCompatible(goldenRoot, cfg); err != nil {
 			return err
 		}

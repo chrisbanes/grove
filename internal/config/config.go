@@ -24,6 +24,7 @@ const (
 
 const groveGitignoreContents = `# Grove local metadata (safe to ignore)
 workspace.json
+backend.json
 .runtime-id
 `
 
@@ -37,7 +38,7 @@ type Config struct {
 
 func DefaultConfig(projectName string) *Config {
 	return &Config{
-		WorkspaceDir:  "/tmp/grove/{project}",
+		WorkspaceDir:  "~/.grove/{project}",
 		MaxWorkspaces: 10,
 	}
 }
@@ -73,6 +74,24 @@ func Load(repoRoot string) (*Config, error) {
 	}
 	cfg.CloneBackend = backend
 	return &cfg, nil
+}
+
+// LoadOrDefault loads config from .grove/config.json if it exists,
+// otherwise returns default config. This enables config-free mode
+// where grove works without explicit initialization.
+func LoadOrDefault(repoRoot string) (*Config, error) {
+	path := filepath.Join(repoRoot, GroveDirName, ConfigFile)
+	_, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		projectName := filepath.Base(repoRoot)
+		cfg := DefaultConfig(projectName)
+		cfg.CloneBackend = "cp"
+		return cfg, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return Load(repoRoot)
 }
 
 func normalizeCloneBackend(value string) (string, error) {
@@ -122,8 +141,25 @@ func EnsureGroveGitignore(repoRoot string) error {
 	return os.WriteFile(path, []byte(groveGitignoreContents), 0644)
 }
 
+// EnsureMinimalGroveDir creates a .grove/ directory with just a .gitignore.
+// This is the lazy-init path: no config.json, no hooks dir. Used by commands
+// like create that need to write runtime files (.runtime-id, workspace.json).
+func EnsureMinimalGroveDir(repoRoot string) error {
+	groveDir := filepath.Join(repoRoot, GroveDirName)
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		return err
+	}
+	return EnsureGroveGitignore(repoRoot)
+}
+
 func ExpandWorkspaceDir(tmpl, projectName string) string {
-	return strings.ReplaceAll(tmpl, "{project}", projectName)
+	expanded := strings.ReplaceAll(tmpl, "{project}", projectName)
+	if strings.HasPrefix(expanded, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			expanded = filepath.Join(home, expanded[2:])
+		}
+	}
+	return expanded
 }
 
 var nonAlnumPattern = regexp.MustCompile(`[^a-z0-9]+`)
@@ -295,6 +331,8 @@ func FindGroveRoot(startPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// First pass: look for .grove/ directory (existing behavior)
 	dir := absPath
 	for {
 		candidate := filepath.Join(dir, GroveDirName)
@@ -303,10 +341,26 @@ func FindGroveRoot(startPath string) (string, error) {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", fmt.Errorf("grove not initialized: no .grove/ directory found above %s", startPath)
+			break
 		}
 		dir = parent
 	}
+
+	// Second pass: fall back to git root
+	dir = absPath
+	for {
+		gitDir := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitDir); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	return "", fmt.Errorf("not a git repository (or any parent): %s", startPath)
 }
 
 type backendState struct {
