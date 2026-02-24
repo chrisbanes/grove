@@ -319,6 +319,8 @@ func FindGroveRoot(startPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// First pass: look for .grove/ directory (existing behavior)
 	dir := absPath
 	for {
 		candidate := filepath.Join(dir, GroveDirName)
@@ -327,10 +329,26 @@ func FindGroveRoot(startPath string) (string, error) {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", fmt.Errorf("grove not initialized: no .grove/ directory found above %s", startPath)
+			break
 		}
 		dir = parent
 	}
+
+	// Second pass: fall back to git root
+	dir = absPath
+	for {
+		gitDir := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitDir); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	return "", fmt.Errorf("not a git repository (or any parent): %s", startPath)
 }
 
 type backendState struct {

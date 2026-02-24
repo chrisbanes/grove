@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -664,5 +665,46 @@ func TestLoadOrDefault_NoGroveDir(t *testing.T) {
 	}
 	if cfg.WorkspaceDir != "~/.grove/{project}" {
 		t.Errorf("expected default workspace dir, got %q", cfg.WorkspaceDir)
+	}
+}
+
+func TestFindGroveRoot_GitFallback(t *testing.T) {
+	dir := t.TempDir()
+	cmd := exec.Command("git", "init", dir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %s\n%s", err, out)
+	}
+
+	root, err := config.FindGroveRoot(dir)
+	if err != nil {
+		t.Fatalf("expected git fallback, got error: %v", err)
+	}
+	if root != dir {
+		t.Errorf("expected %s, got %s", dir, root)
+	}
+}
+
+func TestFindGroveRoot_PrefersGroveDirOverGit(t *testing.T) {
+	dir := t.TempDir()
+	cmd := exec.Command("git", "init", dir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %s\n%s", err, out)
+	}
+	os.MkdirAll(filepath.Join(dir, config.GroveDirName), 0755)
+
+	root, err := config.FindGroveRoot(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if root != dir {
+		t.Errorf("expected %s, got %s", dir, root)
+	}
+}
+
+func TestFindGroveRoot_NoGitNoGrove(t *testing.T) {
+	dir := t.TempDir()
+	_, err := config.FindGroveRoot(dir)
+	if err == nil {
+		t.Fatal("expected error for non-git, non-grove directory")
 	}
 }
