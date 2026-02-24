@@ -24,7 +24,7 @@ var statusCmd = &cobra.Command{
 			return err
 		}
 
-		cfg, err := config.Load(goldenRoot)
+		cfg, err := config.LoadOrDefault(goldenRoot)
 		if err != nil {
 			return err
 		}
