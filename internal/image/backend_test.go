@@ -1,6 +1,8 @@
 package image
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -52,6 +54,25 @@ func TestInitBase_CreatesStateAndRunsCommands(t *testing.T) {
 	}
 	if r.calls[0].name != "hdiutil" || r.calls[1].name != "hdiutil" || r.calls[2].name != "rsync" || r.calls[3].name != "hdiutil" {
 		t.Fatalf("unexpected command sequence: %+v", r.calls)
+	}
+
+	if _, err := os.Stat(initMarkerPath(repoRoot)); !os.IsNotExist(err) {
+		t.Fatalf("expected init marker to be removed, got err=%v", err)
+	}
+}
+
+func TestInitBase_RemovesInitMarkerOnFailure(t *testing.T) {
+	repoRoot := t.TempDir()
+	r := &fakeRunner{
+		outputs: [][]byte{[]byte("create failed")},
+		errs:    []error{errors.New("exit 1")},
+	}
+
+	if _, err := InitBase(repoRoot, r, 20, nil, nil); err == nil {
+		t.Fatal("expected InitBase() to fail")
+	}
+	if _, err := os.Stat(initMarkerPath(repoRoot)); !os.IsNotExist(err) {
+		t.Fatalf("expected init marker to be removed after failure, got err=%v", err)
 	}
 }
 
@@ -343,4 +364,3 @@ func TestRefreshBase_UpdatesGenerationAndCommit(t *testing.T) {
 		t.Fatalf("expected persisted generation 3, got %d", persisted.BaseGeneration)
 	}
 }
-

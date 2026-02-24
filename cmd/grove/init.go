@@ -63,6 +63,9 @@ Creates a .grove/ directory with config and optional hooks.`,
 		if err := os.MkdirAll(filepath.Join(groveDir, config.HooksDir), 0755); err != nil {
 			return err
 		}
+		if err := config.EnsureGroveGitignore(absPath); err != nil {
+			return fmt.Errorf("writing .grove/.gitignore: %w", err)
+		}
 
 		// Write default config
 		projectName := filepath.Base(absPath)

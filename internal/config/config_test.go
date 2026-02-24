@@ -229,7 +229,7 @@ func TestEnsureBackendCompatible_SeedsCPState(t *testing.T) {
 	}
 }
 
-func TestEnsureBackendCompatible_ImageWithoutStateErrors(t *testing.T) {
+func TestEnsureBackendCompatible_ImageWithoutStateAllowsLazyBootstrap(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
 	os.WriteFile(
@@ -242,12 +242,12 @@ func TestEnsureBackendCompatible_ImageWithoutStateErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = config.EnsureBackendCompatible(dir, cfg)
-	if err == nil {
-		t.Fatal("expected error when image backend has not been initialized")
+	if err := config.EnsureBackendCompatible(dir, cfg); err != nil {
+		t.Fatalf("EnsureBackendCompatible() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "grove migrate --to image") {
-		t.Fatalf("expected migrate guidance in error, got: %v", err)
+
+	if _, err := config.LoadBackendState(dir); !os.IsNotExist(err) {
+		t.Fatalf("expected backend state to remain unset for lazy bootstrap, got err=%v", err)
 	}
 }
 
@@ -273,5 +273,59 @@ func TestEnsureBackendCompatible_MismatchErrors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "grove migrate --to image") {
 		t.Fatalf("expected migrate guidance in error, got: %v", err)
+	}
+}
+
+func TestEnsureGroveGitignore_CreatesDefaultFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".grove"), 0755); err != nil {
+		t.Fatalf("mkdir .grove: %v", err)
+	}
+
+	if err := config.EnsureGroveGitignore(dir); err != nil {
+		t.Fatalf("EnsureGroveGitignore() error = %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".grove", ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .grove/.gitignore: %v", err)
+	}
+	content := string(data)
+	for _, pattern := range []string{
+		"images/base.sparsebundle/",
+		"images/state.json",
+		"images/init-in-progress",
+		"shadows/",
+		"workspaces/",
+		"mnt/",
+		"workspace.json",
+	} {
+		if !strings.Contains(content, pattern) {
+			t.Fatalf("expected pattern %q in .grove/.gitignore, got:\n%s", pattern, content)
+		}
+	}
+}
+
+func TestEnsureGroveGitignore_DoesNotOverwriteExisting(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".grove"), 0755); err != nil {
+		t.Fatalf("mkdir .grove: %v", err)
+	}
+
+	path := filepath.Join(dir, ".grove", ".gitignore")
+	if err := os.WriteFile(path, []byte("custom\n"), 0644); err != nil {
+		t.Fatalf("seed .gitignore: %v", err)
+	}
+
+	if err := config.EnsureGroveGitignore(dir); err != nil {
+		t.Fatalf("EnsureGroveGitignore() error = %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .grove/.gitignore: %v", err)
+	}
+	if string(data) != "custom\n" {
+		t.Fatalf("expected existing .gitignore to remain unchanged, got:\n%s", string(data))
 	}
 }

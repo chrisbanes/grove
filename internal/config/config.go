@@ -17,6 +17,16 @@ const (
 	HooksDir      = "hooks"
 )
 
+const groveGitignoreContents = `# Grove runtime state (safe to ignore)
+images/base.sparsebundle/
+images/state.json
+images/init-in-progress
+shadows/
+workspaces/
+mnt/
+workspace.json
+`
+
 type Config struct {
 	WarmupCommand string   `json:"warmup_command,omitempty"`
 	WorkspaceDir  string   `json:"workspace_dir"`
@@ -82,6 +92,16 @@ func Save(repoRoot string, cfg *Config) error {
 	return os.WriteFile(filepath.Join(groveDir, ConfigFile), data, 0644)
 }
 
+func EnsureGroveGitignore(repoRoot string) error {
+	path := filepath.Join(repoRoot, GroveDirName, ".gitignore")
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return os.WriteFile(path, []byte(groveGitignoreContents), 0644)
+}
+
 func ExpandWorkspaceDir(tmpl, projectName string) string {
 	return strings.ReplaceAll(tmpl, "{project}", projectName)
 }
@@ -111,7 +131,7 @@ type backendState struct {
 
 // EnsureBackendCompatible ensures the configured backend matches the initialized backend.
 // If no backend state exists yet, this bootstraps it for cp repos and image repos that already
-// have image state. It returns actionable errors for backend mismatches or uninitialized image mode.
+// have image state. Image mode without state is allowed for lazy bootstrap at create/update time.
 func EnsureBackendCompatible(repoRoot string, cfg *Config) error {
 	backend, err := LoadBackendState(repoRoot)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -136,7 +156,9 @@ func EnsureBackendCompatible(repoRoot string, cfg *Config) error {
 		return SaveBackendState(repoRoot, "cp")
 	case "image":
 		if !hasImageState {
-			return fmt.Errorf("image backend is not initialized.\nRun `grove migrate --to image`")
+			// Allow lazy image backend bootstrap. `grove create` and `grove update`
+			// will initialize the base image when state is missing.
+			return nil
 		}
 		return SaveBackendState(repoRoot, "image")
 	default:

@@ -6,18 +6,30 @@ import (
 	"path/filepath"
 )
 
+const defaultBaseSizeGB = 200
+
 func InitBase(repoRoot string, runner Runner, baseSizeGB int, excludes []string, onProgress func(int, string)) (_ *State, err error) {
 	if baseSizeGB <= 0 {
-		baseSizeGB = 20
+		baseSizeGB = defaultBaseSizeGB
 	}
 
-	basePath := filepath.Join(imagesDir(repoRoot), "base.sparsebundle")
 	if err := os.MkdirAll(imagesDir(repoRoot), 0755); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(baseMountpoint(repoRoot), 0755); err != nil {
 		return nil, err
 	}
+	if err := os.WriteFile(initMarkerPath(repoRoot), []byte("initializing\n"), 0644); err != nil {
+		return nil, err
+	}
+	defer func() {
+		removeErr := os.Remove(initMarkerPath(repoRoot))
+		if err == nil && removeErr != nil && !os.IsNotExist(removeErr) {
+			err = removeErr
+		}
+	}()
+
+	basePath := baseImagePath(repoRoot)
 	if onProgress != nil {
 		onProgress(0, "creating base image")
 	}
@@ -76,7 +88,7 @@ func RefreshBase(repoRoot, goldenRoot string, runner Runner, commit string, excl
 		return nil, err
 	}
 	if st.BasePath == "" {
-		st.BasePath = filepath.Join(imagesDir(repoRoot), "base.sparsebundle")
+		st.BasePath = baseImagePath(repoRoot)
 	}
 	if err := os.MkdirAll(baseMountpoint(repoRoot), 0755); err != nil {
 		return nil, err
@@ -131,4 +143,3 @@ func mapPercent(value, total, min, max int) int {
 	}
 	return min + (value*(max-min))/total
 }
-

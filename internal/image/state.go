@@ -3,12 +3,15 @@ package image
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 )
+
+var ErrInitIncomplete = errors.New("image backend initialization appears incomplete")
 
 // State stores image backend metadata for a golden copy.
 type State struct {
@@ -29,8 +32,17 @@ type WorkspaceMeta struct {
 }
 
 func LoadState(repoRoot string) (*State, error) {
+	if detectErr := detectInitMarker(repoRoot); detectErr != nil {
+		return nil, detectErr
+	}
+
 	data, err := os.ReadFile(stateFilePath(repoRoot))
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			if detectErr := detectBaseWithoutState(repoRoot); detectErr != nil {
+				return nil, detectErr
+			}
+		}
 		return nil, err
 	}
 	var st State
@@ -119,6 +131,14 @@ func stateFilePath(repoRoot string) string {
 	return filepath.Join(imagesDir(repoRoot), "state.json")
 }
 
+func baseImagePath(repoRoot string) string {
+	return filepath.Join(imagesDir(repoRoot), "base.sparsebundle")
+}
+
+func initMarkerPath(repoRoot string) string {
+	return filepath.Join(imagesDir(repoRoot), "init-in-progress")
+}
+
 func workspacesDir(repoRoot string) string {
 	return filepath.Join(repoRoot, ".grove", "workspaces")
 }
@@ -127,3 +147,21 @@ func workspaceMetaPath(repoRoot, id string) string {
 	return filepath.Join(workspacesDir(repoRoot), id+".json")
 }
 
+func detectInitMarker(repoRoot string) error {
+	if _, err := os.Stat(initMarkerPath(repoRoot)); err == nil {
+		return fmt.Errorf("%w: found %s. Previous initialization may have been cancelled; remove stale image data and rerun `grove migrate --to image`", ErrInitIncomplete, initMarkerPath(repoRoot))
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func detectBaseWithoutState(repoRoot string) error {
+	if _, err := os.Stat(baseImagePath(repoRoot)); err == nil {
+		return fmt.Errorf("%w: found %s without %s; remove stale image data and rerun `grove migrate --to image`", ErrInitIncomplete, baseImagePath(repoRoot), stateFilePath(repoRoot))
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	return nil
+}
