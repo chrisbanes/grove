@@ -25,7 +25,7 @@ caches and gitignored files. Builds in the workspace start warm.
 Without --branch, the workspace stays on the golden copy's current branch.
 With --branch, a new git branch is created and checked out in the workspace.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		progressEnabled, _ := cmd.Flags().GetBool("progress")
+		progressEnabled := resolveProgress(cmd)
 		var (
 			progressMu sync.Mutex
 			progress   *progressRenderer
@@ -180,6 +180,6 @@ func init() {
 	createCmd.Flags().String("branch", "", "Create and checkout a new git branch in the workspace (default: golden copy's current branch)")
 	createCmd.Flags().Bool("force", false, "Proceed even if golden copy has uncommitted changes")
 	createCmd.Flags().Bool("json", false, "Output workspace info as JSON")
-	createCmd.Flags().Bool("progress", false, "Show progress output for long-running create operations")
+	createCmd.Flags().Bool("progress", false, "Show progress output (default: auto-detect TTY)")
 	rootCmd.AddCommand(createCmd)
 }

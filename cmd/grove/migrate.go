@@ -17,7 +17,7 @@ var migrateCmd = &cobra.Command{
 	Short: "Migrate workspace backend safely",
 	Long:  `Migrates an initialized golden copy between cp and image backends.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		progressEnabled, _ := cmd.Flags().GetBool("progress")
+		progressEnabled := resolveProgress(cmd)
 		var progress *progressRenderer
 		if progressEnabled {
 			progress = newProgressRenderer(os.Stderr, isTerminalFile(os.Stderr), "migrate")
@@ -132,7 +132,7 @@ var migrateCmd = &cobra.Command{
 func init() {
 	migrateCmd.Flags().String("to", "", "Target backend: cp or image")
 	migrateCmd.Flags().Int("image-size-gb", 200, "Base sparsebundle size in GB when migrating to image")
-	migrateCmd.Flags().Bool("progress", false, "Show progress output during image backend initialization")
+	migrateCmd.Flags().Bool("progress", false, "Show progress output (default: auto-detect TTY)")
 	_ = migrateCmd.MarkFlagRequired("to")
 	rootCmd.AddCommand(migrateCmd)
 }
