@@ -15,10 +15,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var initCmd = &cobra.Command{
-	Use:   "init [path]",
+var configCmd = &cobra.Command{
+	Use:   "config [path]",
 	Short: "Configure grove for a repository",
-	Long: `Sets up grove configuration for a git repository.
+	Long: `Configure grove settings for a git repository.
 Runs an interactive wizard when called without flags.
 Can be re-run to update configuration.`,
 	Args: cobra.MaximumNArgs(1),
@@ -26,7 +26,7 @@ Can be re-run to update configuration.`,
 		progressEnabled := resolveProgress(cmd)
 		var progress *progressRenderer
 		if progressEnabled {
-			progress = newProgressRenderer(os.Stderr, isTerminalFile(os.Stderr), "init")
+			progress = newProgressRenderer(os.Stderr, isTerminalFile(os.Stderr), "config")
 			defer progress.Done()
 		}
 
@@ -84,7 +84,7 @@ Can be re-run to update configuration.`,
 
 		// Interactive prompts for unset options
 		if interactive {
-			fmt.Printf("Initializing grove for %s...\n\n", projectName)
+			fmt.Printf("Configuring grove for %s...\n\n", projectName)
 
 			if !backendSet {
 				backendChoice := cfg.CloneBackend
@@ -252,7 +252,7 @@ Can be re-run to update configuration.`,
 			return fmt.Errorf("saving backend state: %w", err)
 		}
 
-		fmt.Printf("Grove initialized at %s\n", absPath)
+		fmt.Printf("Grove configured for %s\n", absPath)
 		fmt.Printf("Workspace dir: %s\n", config.ExpandWorkspaceDir(cfg.WorkspaceDir, projectName))
 		fmt.Printf("State dir:     %s\n", config.ExpandStateDir(cfg.StateDir))
 		return nil
@@ -260,12 +260,12 @@ Can be re-run to update configuration.`,
 }
 
 func init() {
-	initCmd.Flags().String("warmup-command", "", "Command to run for warming up build caches")
-	initCmd.Flags().String("workspace-dir", "", "Directory for workspaces (default: ~/grove-workspaces/{project})")
-	initCmd.Flags().String("state-dir", "", "Directory for grove internal state (default: ~/.grove)")
-	initCmd.Flags().String("backend", "", "Workspace backend: cp or image (experimental)")
-	initCmd.Flags().Int("image-size-gb", 200, "Base sparsebundle size in GB when using --backend image")
-	initCmd.Flags().Bool("progress", false, "Show progress output (default: auto-detect TTY)")
-	initCmd.Flags().Bool("defaults", false, "Skip interactive prompts and use all defaults")
-	rootCmd.AddCommand(initCmd)
+	configCmd.Flags().String("warmup-command", "", "Command to run for warming up build caches")
+	configCmd.Flags().String("workspace-dir", "", "Directory for workspaces (default: ~/grove-workspaces/{project})")
+	configCmd.Flags().String("state-dir", "", "Directory for grove internal state (default: ~/.grove)")
+	configCmd.Flags().String("backend", "", "Workspace backend: cp or image (experimental)")
+	configCmd.Flags().Int("image-size-gb", 200, "Base sparsebundle size in GB when using --backend image")
+	configCmd.Flags().Bool("progress", false, "Show progress output (default: auto-detect TTY)")
+	configCmd.Flags().Bool("defaults", false, "Skip interactive prompts and use all defaults")
+	rootCmd.AddCommand(configCmd)
 }

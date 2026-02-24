@@ -112,7 +112,7 @@ func groveExpectErr(t *testing.T, binary, dir string, args ...string) string {
 	return string(out)
 }
 
-func TestCreateWithoutInit(t *testing.T) {
+func TestCreateWithoutConfig(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("APFS tests only run on macOS")
 	}
@@ -120,7 +120,7 @@ func TestCreateWithoutInit(t *testing.T) {
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
 
-	// Skip grove init entirely — go straight to create
+	// Skip grove config entirely — go straight to create
 	out := grove(t, binary, repo, "create", "--json")
 	var info workspace.Info
 	if err := json.Unmarshal([]byte(out), &info); err != nil {
@@ -144,7 +144,7 @@ func TestCreateWithoutInit(t *testing.T) {
 		t.Error(".grove/ not created lazily")
 	}
 
-	// No config.json should exist (that requires explicit init)
+	// No config.json should exist (that requires explicit config)
 	if _, err := os.Stat(filepath.Join(repo, ".grove", "config.json")); err == nil {
 		t.Error("config.json should not exist without explicit init")
 	}
@@ -172,7 +172,7 @@ func TestCreate_CloneMetadataSignal(t *testing.T) {
 
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
-	grove(t, binary, repo, "init")
+	grove(t, binary, repo, "config")
 
 	out := grove(t, binary, repo, "create", "--json")
 	var info workspace.Info
@@ -234,10 +234,10 @@ func TestFullLifecycle(t *testing.T) {
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
 
-	// grove init
-	out := grove(t, binary, repo, "init")
-	if !strings.Contains(out, "Grove initialized") {
-		t.Fatalf("unexpected init output: %s", out)
+	// grove config
+	out := grove(t, binary, repo, "config")
+	if !strings.Contains(out, "Grove configured") {
+		t.Fatalf("unexpected config output: %s", out)
 	}
 
 	// Verify .grove/config.json exists
@@ -314,7 +314,7 @@ func TestImageBackendLifecycle(t *testing.T) {
 	repo := setupTestRepo(t)
 
 	// Initialize with the experimental image backend.
-	grove(t, binary, repo, "init", "--backend", "image", "--image-size-gb", "5")
+	grove(t, binary, repo, "config", "--backend", "image", "--image-size-gb", "5")
 	cfg, err := config.Load(repo)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
@@ -354,7 +354,7 @@ func TestBackendMismatchRequiresMigration(t *testing.T) {
 
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
-	grove(t, binary, repo, "init")
+	grove(t, binary, repo, "config")
 
 	cfgPath := filepath.Join(repo, ".grove", "config.json")
 	data, err := os.ReadFile(cfgPath)
@@ -389,7 +389,7 @@ func TestMigrateCommand(t *testing.T) {
 
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
-	grove(t, binary, repo, "init")
+	grove(t, binary, repo, "config")
 
 	// cp -> image
 	out := grove(t, binary, repo, "migrate", "--to", "image", "--image-size-gb", "5")
@@ -429,7 +429,7 @@ func TestMigrateCommand_ConfigMismatchUsesInitializedBackend(t *testing.T) {
 
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
-	grove(t, binary, repo, "init")
+	grove(t, binary, repo, "config")
 
 	// Move to image backend and create an active image workspace.
 	grove(t, binary, repo, "migrate", "--to", "image", "--image-size-gb", "5")
@@ -477,7 +477,7 @@ func TestPostCloneHook(t *testing.T) {
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
 
-	grove(t, binary, repo, "init")
+	grove(t, binary, repo, "config")
 
 	// Create a post-clone hook that creates a marker file
 	hookPath := filepath.Join(repo, ".grove", "hooks", "post-clone")
@@ -505,7 +505,7 @@ func TestDirtyGoldenCopy(t *testing.T) {
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
 
-	grove(t, binary, repo, "init") // init on a clean repo
+	grove(t, binary, repo, "config") // config on a clean repo
 
 	// Make golden copy dirty
 	os.WriteFile(filepath.Join(repo, "dirty.txt"), []byte("wip"), 0644)
@@ -528,7 +528,7 @@ func TestDirtyGoldenCopy(t *testing.T) {
 	grove(t, binary, repo, "destroy", "--all")
 }
 
-func TestInitEdgeCases(t *testing.T) {
+func TestConfigEdgeCases(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("APFS tests only run on macOS")
 	}
@@ -536,7 +536,7 @@ func TestInitEdgeCases(t *testing.T) {
 
 	t.Run("non-git-directory", func(t *testing.T) {
 		dir := t.TempDir()
-		out := groveExpectErr(t, binary, dir, "init")
+		out := groveExpectErr(t, binary, dir, "config")
 		if !strings.Contains(out, "is not a git repository") {
 			t.Errorf("expected 'is not a git repository', got: %s", out)
 		}
@@ -544,19 +544,19 @@ func TestInitEdgeCases(t *testing.T) {
 
 	t.Run("already-initialized", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
-		// Re-running init should succeed (update config, not error)
-		out := grove(t, binary, repo, "init")
-		if !strings.Contains(out, "Grove initialized") {
-			t.Errorf("expected 'Grove initialized' on re-init, got: %s", out)
+		grove(t, binary, repo, "config")
+		// Re-running config should succeed (update config, not error)
+		out := grove(t, binary, repo, "config")
+		if !strings.Contains(out, "Grove configured") {
+			t.Errorf("expected 'Grove configured' on re-config, got: %s", out)
 		}
 	})
 
-	t.Run("reinit-updates-config", func(t *testing.T) {
+	t.Run("reconfig-updates-config", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init", "--defaults")
-		// Re-running init should succeed (not error)
-		grove(t, binary, repo, "init", "--defaults", "--warmup-command", "echo updated")
+		grove(t, binary, repo, "config", "--defaults")
+		// Re-running config should succeed (not error)
+		grove(t, binary, repo, "config", "--defaults", "--warmup-command", "echo updated")
 
 		cfg, err := config.Load(repo)
 		if err != nil {
@@ -569,7 +569,7 @@ func TestInitEdgeCases(t *testing.T) {
 
 	t.Run("warmup-command", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		out := grove(t, binary, repo, "init", "--warmup-command", "touch warmup-marker")
+		out := grove(t, binary, repo, "config", "--warmup-command", "touch warmup-marker")
 		if !strings.Contains(out, "Running warmup") {
 			t.Errorf("expected warmup output, got: %s", out)
 		}
@@ -581,9 +581,9 @@ func TestInitEdgeCases(t *testing.T) {
 	t.Run("explicit-path-argument", func(t *testing.T) {
 		repo := setupTestRepo(t)
 		otherDir := t.TempDir()
-		grove(t, binary, otherDir, "init", repo)
+		grove(t, binary, otherDir, "config", repo)
 		if _, err := os.Stat(filepath.Join(repo, ".grove", "config.json")); err != nil {
-			t.Error("init with explicit path did not create .grove/config.json at target")
+			t.Error("config with explicit path did not create .grove/config.json at target")
 		}
 		if _, err := os.Stat(filepath.Join(otherDir, ".grove")); err == nil {
 			t.Error(".grove was incorrectly created in the working directory")
@@ -599,7 +599,7 @@ func TestCreateEdgeCases(t *testing.T) {
 
 	t.Run("from-inside-workspace", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 		out := grove(t, binary, repo, "create", "--json")
 		var info workspace.Info
 		if err := json.Unmarshal([]byte(out), &info); err != nil {
@@ -615,7 +615,7 @@ func TestCreateEdgeCases(t *testing.T) {
 
 	t.Run("max-workspaces-reached", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 
 		// Patch config to allow only 1 workspace
 		cfgPath := filepath.Join(repo, ".grove", "config.json")
@@ -636,7 +636,7 @@ func TestCreateEdgeCases(t *testing.T) {
 
 	t.Run("failed-post-clone-hook-cleanup", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 
 		hookPath := filepath.Join(repo, ".grove", "hooks", "post-clone")
 		if err := os.WriteFile(hookPath, []byte("#!/bin/bash\nexit 1\n"), 0755); err != nil {
@@ -657,7 +657,7 @@ func TestCreateEdgeCases(t *testing.T) {
 
 	t.Run("no-branch-stays-on-HEAD", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 
 		goldenCommit := run(t, repo, "git", "rev-parse", "--short", "HEAD")
 
@@ -683,7 +683,7 @@ func TestDestroyEdgeCases(t *testing.T) {
 
 	t.Run("by-absolute-path", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 		out := grove(t, binary, repo, "create", "--json")
 		var info workspace.Info
 		json.Unmarshal([]byte(out), &info)
@@ -696,7 +696,7 @@ func TestDestroyEdgeCases(t *testing.T) {
 
 	t.Run("all-with-no-workspaces", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 		out := grove(t, binary, repo, "destroy", "--all")
 		if !strings.Contains(out, "No workspaces to destroy") {
 			t.Errorf("expected 'No workspaces to destroy', got: %s", out)
@@ -705,7 +705,7 @@ func TestDestroyEdgeCases(t *testing.T) {
 
 	t.Run("nonexistent-id", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 		out := groveExpectErr(t, binary, repo, "destroy", "nonexistent-id-abc123")
 		if !strings.Contains(out, "workspace not found") {
 			t.Errorf("expected 'workspace not found', got: %s", out)
@@ -714,7 +714,7 @@ func TestDestroyEdgeCases(t *testing.T) {
 
 	t.Run("push-failure-does-not-destroy", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 
 		createOut := grove(t, binary, repo, "create", "--json", "--branch", "feature/push-check")
 		var info workspace.Info
@@ -735,7 +735,7 @@ func TestDestroyEdgeCases(t *testing.T) {
 
 	t.Run("no-args-no-all", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 		out := groveExpectErr(t, binary, repo, "destroy")
 		if !strings.Contains(out, "provide a workspace ID or path") {
 			t.Errorf("expected usage error, got: %s", out)
@@ -749,7 +749,7 @@ func TestMultiWorkspaceIsolation(t *testing.T) {
 	}
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
-	grove(t, binary, repo, "init")
+	grove(t, binary, repo, "config")
 
 	// Create two workspaces
 	out1 := grove(t, binary, repo, "create", "--json", "--branch", "ws1-branch")
@@ -813,7 +813,7 @@ func TestListOutput(t *testing.T) {
 
 	t.Run("no-workspaces", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 		out := grove(t, binary, repo, "list")
 		if !strings.Contains(out, "No active workspaces") {
 			t.Errorf("expected 'No active workspaces', got: %s", out)
@@ -822,7 +822,7 @@ func TestListOutput(t *testing.T) {
 
 	t.Run("json-multiple-workspaces", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 
 		out1 := grove(t, binary, repo, "create", "--json")
 		var info1 workspace.Info
@@ -877,7 +877,7 @@ func TestStatusOutput(t *testing.T) {
 
 	t.Run("from-inside-workspace", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 		out := grove(t, binary, repo, "create", "--json")
 		var info workspace.Info
 		if err := json.Unmarshal([]byte(out), &info); err != nil {
@@ -895,7 +895,7 @@ func TestStatusOutput(t *testing.T) {
 
 	t.Run("dirty-golden-copy", func(t *testing.T) {
 		repo := setupTestRepo(t)
-		grove(t, binary, repo, "init")
+		grove(t, binary, repo, "config")
 		os.WriteFile(filepath.Join(repo, "dirty.txt"), []byte("wip"), 0644)
 
 		statusOut := grove(t, binary, repo, "status")
@@ -931,7 +931,7 @@ func TestUpdateWithLocalRemote(t *testing.T) {
 	run(t, goldenDir, "git", "push", "-u", "origin", branch)
 
 	// Initialize grove with a warmup command
-	grove(t, binary, goldenDir, "init", "--warmup-command", "touch warmup-ran")
+	grove(t, binary, goldenDir, "config", "--warmup-command", "touch warmup-ran")
 
 	// Make a new commit via a separate clone
 	pusher := t.TempDir()
@@ -972,7 +972,7 @@ func TestCreateIDIncludesBranch(t *testing.T) {
 	}
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
-	grove(t, binary, repo, "init")
+	grove(t, binary, repo, "config")
 
 	// Create with explicit branch
 	out := grove(t, binary, repo, "create", "--json", "--branch", "feat/my-feature")
@@ -1006,7 +1006,7 @@ func TestListJsonEmpty(t *testing.T) {
 	}
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
-	grove(t, binary, repo, "init")
+	grove(t, binary, repo, "config")
 
 	out := strings.TrimSpace(grove(t, binary, repo, "list", "--json"))
 	// json.MarshalIndent on a nil slice returns "null". This is the current known
@@ -1023,7 +1023,7 @@ func TestCreateProgressJsonContract(t *testing.T) {
 	}
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
-	grove(t, binary, repo, "init")
+	grove(t, binary, repo, "config")
 
 	stdout, stderr := groveOutErr(t, binary, repo, "create", "--progress", "--json")
 
@@ -1049,7 +1049,7 @@ func TestCreateJsonNoProgressNoise(t *testing.T) {
 	}
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
-	grove(t, binary, repo, "init")
+	grove(t, binary, repo, "config")
 
 	stdout, stderr := groveOutErr(t, binary, repo, "create", "--json")
 
@@ -1070,8 +1070,8 @@ func TestCreateWithExcludes(t *testing.T) {
 	binary := buildGrove(t)
 	repo := setupTestRepo(t)
 
-	// Init first (clean repo)
-	grove(t, binary, repo, "init")
+	// Config first (clean repo)
+	grove(t, binary, repo, "config")
 
 	// Add files that should be excluded (after init, so they are untracked artifacts)
 	os.MkdirAll(filepath.Join(repo, "__pycache__"), 0755)

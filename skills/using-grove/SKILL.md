@@ -13,7 +13,7 @@ I'm using the using-grove skill to create an isolated workspace with warm build 
 test -f "$(git rev-parse --show-toplevel)/.grove/config.json"
 ```
 
-If `.grove/config.json` is not found: Grove is not initialized in this repo. Use the `grove:grove-init` skill to set it up first.
+If `.grove/config.json` is not found: Grove is not initialized in this repo. Use the `grove:grove-config` skill to set it up first.
 
 ### Step 2: Verify grove CLI is installed
 

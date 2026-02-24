@@ -61,7 +61,7 @@ go install github.com/chrisbanes/grove/cmd/grove@latest
 ```bash
 # 1. Register your repo as a golden copy
 cd ~/dev/myproject
-grove init --warmup-command "./gradlew assemble"
+grove config --warmup-command "./gradlew assemble"
 
 # 2. Create a workspace (instant CoW clone)
 grove create --branch feature/new-login
@@ -78,23 +78,23 @@ grove destroy feature-new-login-a1b2
 
 ## Commands
 
-### `grove init [path]`
+### `grove config [path]`
 
-Register a git repository as a grove-managed golden copy. Creates a `.grove/` directory with configuration, hooks, and a `.grove/.gitignore` for workspace markers (and legacy runtime paths). Defaults to the current directory.
+Configure a git repository as a grove-managed golden copy. Creates a `.grove/` directory with configuration, hooks, and a `.grove/.gitignore` for workspace markers (and legacy runtime paths). Defaults to the current directory.
 
 ```bash
-grove init --warmup-command "npm run build" --workspace-dir ~/workspaces/myproject
+grove config --warmup-command "npm run build" --workspace-dir ~/workspaces/myproject
 # Running warmup: npm run build
-# Grove initialized at /Users/you/dev/myproject
+# Grove configured at /Users/you/dev/myproject
 # Workspace dir: /Users/you/workspaces/myproject
 
 # Experimental image backend (macOS): creates a base sparsebundle
-grove init --backend image --image-size-gb 200
+grove config --backend image --image-size-gb 200
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--warmup-command` | Shell command to warm build caches (runs during init and update) |
+| `--warmup-command` | Shell command to warm build caches (runs during config and update) |
 | `--workspace-dir` | Directory for workspaces (default: `/tmp/grove/{project}`) |
 | `--backend` | Workspace backend (`cp` default, `image` experimental) |
 | `--image-size-gb` | Base sparsebundle size in GB for `--backend image` |
@@ -254,7 +254,7 @@ Grove stores its configuration in `.grove/config.json` inside the golden copy:
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `warmup_command` | Shell command to warm build caches. Runs during `grove init` and `grove update`. | *(none)* |
+| `warmup_command` | Shell command to warm build caches. Runs during `grove config` and `grove update`. | *(none)* |
 | `workspace_dir` | Where workspaces are created. `{project}` expands to the golden copy's directory name. | `/tmp/grove/{project}` |
 | `max_workspaces` | Maximum concurrent workspaces. Prevents disk exhaustion. | `10` |
 | `exclude` | Glob patterns for files/directories to skip when cloning. See [Exclude Patterns](#exclude-patterns). | `[]` |
@@ -404,7 +404,7 @@ This copies the skill files to your agent's skills directory (e.g., `~/.claude/s
 |-------|-------------|
 | `grove:using-grove` | Creates a warm workspace before feature work. Replaces `superpowers:using-git-worktrees`. |
 | `grove:finishing-grove-workspace` | Guides completion and cleanup when work is done. Replaces `superpowers:finishing-a-development-branch`. |
-| `grove:grove-init` | Opinionated first-time setup with build system detection. Also available as `/grove-init`. |
+| `grove:grove-config` | Opinionated first-time setup with build system detection. Also available as `/grove-config`. |
 | `grove:grove-doctor` | Diagnoses Grove setup issues (APFS, CLI, hooks, disk space). |
 | `grove:grove-multi-agent` | Orchestrates parallel agents across isolated workspaces. |
 

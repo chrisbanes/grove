@@ -154,7 +154,7 @@ grove destroy <workspace-id>
 
 - **Agents reporting conflicting changes to the same file** — the task decomposition was not truly independent. Pause cleanup, review the conflicts manually, and resolve before pushing.
 - **Multiple agents failing with similar errors** — this may indicate a systemic issue with the golden copy (stale build state, broken tests at baseline). Run `grove update` on the golden copy and retry.
-- **Running out of workspace slots** — Grove enforces a `max_workspaces` limit from `.grove/config.json`. If the limit is hit, create and dispatch agents in batches, or increase the limit with `grove init`.
+- **Running out of workspace slots** — Grove enforces a `max_workspaces` limit from `.grove/config.json`. If the limit is hit, create and dispatch agents in batches, or increase the limit with `grove config`.
 - **Subagent returns without committing** — the agent may have encountered test failures or blocking issues. Check the agent's concern report before treating the workspace as complete.
 
 ## Key Difference from dispatching-parallel-agents
@@ -164,7 +164,7 @@ grove destroy <workspace-id>
 ## Integration
 
 - **Uses:** `grove create` and `grove destroy` CLI commands
-- **Requires:** Grove initialized in the repo (`grove:grove-init`) and CLI available (`grove:grove-doctor`)
+- **Requires:** Grove initialized in the repo (`grove:grove-config`) and CLI available (`grove:grove-doctor`)
 - **Complements:** `superpowers:dispatching-parallel-agents` — same parallel dispatch pattern, but with isolated workspaces instead of a shared directory
 - **Each subagent should follow:** `superpowers:test-driven-development`
 - **Cleanup follows:** `grove:finishing-grove-workspace` for individual workspace resolution

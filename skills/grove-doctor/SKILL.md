@@ -44,7 +44,7 @@ test -f .grove/config.json
 ```
 
 - PASS if the file exists
-- FAIL if not found. Fix: run the `grove:grove-init` skill to initialize Grove in this repository
+- FAIL if not found. Fix: run the `grove:grove-config` skill to initialize Grove in this repository
 
 ### Check 5: Golden copy health
 

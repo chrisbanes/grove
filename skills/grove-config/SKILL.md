@@ -1,9 +1,9 @@
 ---
-name: grove-init
-description: Use when setting up Grove for a repository that does not yet have a `.grove/config.json`, or when a user asks to initialize Grove in their project
+name: grove-config
+description: Use when configuring Grove for a repository that does not yet have a `.grove/config.json`, or when a user asks to configure Grove in their project
 ---
 
-I'm using the grove-init skill to set up Grove for this project.
+I'm using the grove-config skill to set up Grove for this project.
 
 ## Workflow
 
@@ -47,10 +47,10 @@ Show the user:
 
 Ask for confirmation before proceeding.
 
-### Step 5: Run grove init
+### Step 5: Run grove config
 
 ```bash
-grove init --warmup-command "<cmd>"
+grove config --warmup-command "<cmd>"
 ```
 
 ### Step 6: Write post-clone hook
@@ -74,23 +74,23 @@ git commit -m "chore: add Grove configuration"
 
 | Command | Purpose |
 |---|---|
-| `grove init --warmup-command "<cmd>"` | Initialize Grove |
+| `grove config --warmup-command "<cmd>"` | Initialize Grove |
 | `grove update` | Refresh golden copy build state |
 
 ## Common Mistakes
 
-- **Running `grove init` outside a git repo** — Grove requires git; always verify first.
+- **Running `grove config` outside a git repo** — Grove requires git; always verify first.
 - **Skipping the post-clone hook** — without it, workspaces inherit stale lock files or cache artifacts.
 - **Not committing `.grove/`** — commit so collaborators and CI get the same warmup behavior.
 
 ## Red Flags
 
-- `grove init` fails with a permissions error — check `grove` is installed and the user has write access.
-- Warmup command exits non-zero during `grove init` — fix unresolved dependencies before initializing.
+- `grove config` fails with a permissions error — check `grove` is installed and the user has write access.
+- Warmup command exits non-zero during `grove config` — fix unresolved dependencies before initializing.
 - Multiple `package.json` and `build.gradle` at the root — polyglot monorepo; ask which is primary.
 
 ## Integration
 
 - **Standalone** — not called by other skills automatically
 - **Suggested by:** `grove:using-grove` when `.grove/config.json` is not found
-- **Invoked via:** `/grove-init` slash command
+- **Invoked via:** `/grove-config` slash command

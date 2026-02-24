@@ -25,7 +25,7 @@ incremental from the start.
 A checkout of the repository with warm build state. Grove is
 branch-agnostic — the golden copy is simply "whatever is on disk right
 now." If you need golden copies for multiple branches, use git worktrees
-to maintain separate checkouts and `grove init` each one independently.
+to maintain separate checkouts and `grove config` each one independently.
 
 - Has been built recently (warm caches, compiled outputs)
 - Contains all gitignored build artifacts (`.gradle/`, `build/`, etc.)
@@ -54,7 +54,7 @@ workspace a warm build cache from the start.
 ## CLI Design
 
 ```
-grove init [path]             Initialize a golden copy from an existing repo
+grove config [path]            Configure a golden copy from an existing repo
 grove update                  Pull latest + rebuild the golden copy (convenience)
 grove create [--branch NAME] [--progress]  Create a new workspace from the golden copy
 grove list                    List active workspaces
@@ -63,7 +63,7 @@ grove destroy --all           Remove all workspaces
 grove status                  Show golden copy info and workspace summary
 ```
 
-### `grove init [path]`
+### `grove config [path]`
 
 Registers an existing git repo as a grove-managed golden copy.
 
@@ -388,7 +388,7 @@ by the same upstream skills (`brainstorming`, `subagent-driven-development`,
 `executing-plans`).
 
 If grove is not initialized in the current repo (no `.grove/` directory),
-the skill tells the user to run `grove init` rather than silently falling
+the skill tells the user to run `grove config` rather than silently falling
 back to plain worktrees.
 
 ### Skill: `using-grove`
@@ -415,7 +415,7 @@ description: "Use when starting feature work that needs isolation or before
    # Check for .grove/ directory in repo root
    test -d "$(git rev-parse --show-toplevel)/.grove"
    ```
-   If not found: "Grove is not initialized in this repo. Run `grove init`
+   If not found: "Grove is not configured in this repo. Run `grove config`
    to set up a golden copy first."
 
 2. **Verify grove CLI is installed**
