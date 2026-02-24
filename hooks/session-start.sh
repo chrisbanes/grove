@@ -75,7 +75,7 @@ fi
 
 # Surface a CLI-not-installed warning when grove is absent but .grove/ exists.
 if ! command -v grove >/dev/null 2>&1; then
-    context_message="${context_message} Grove CLI is not installed. Use grove:grove-init for setup guidance."
+    context_message="${context_message} Grove CLI is not installed. Use grove:grove-config for setup guidance."
 fi
 
 context_escaped="$(escape_for_json "$context_message")"
