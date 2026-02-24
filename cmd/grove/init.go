@@ -23,7 +23,7 @@ Runs an interactive wizard when called without flags.
 Can be re-run to update configuration.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		progressEnabled, _ := cmd.Flags().GetBool("progress")
+		progressEnabled := resolveProgress(cmd)
 		var progress *progressRenderer
 		if progressEnabled {
 			progress = newProgressRenderer(os.Stderr, isTerminalFile(os.Stderr), "init")
@@ -238,7 +238,7 @@ func init() {
 	initCmd.Flags().String("workspace-dir", "", "Directory for workspaces (default: ~/.grove/{project})")
 	initCmd.Flags().String("backend", "", "Workspace backend: cp or image (experimental)")
 	initCmd.Flags().Int("image-size-gb", 200, "Base sparsebundle size in GB when using --backend image")
-	initCmd.Flags().Bool("progress", false, "Show progress output during image backend initialization")
+	initCmd.Flags().Bool("progress", false, "Show progress output (default: auto-detect TTY)")
 	initCmd.Flags().Bool("defaults", false, "Skip interactive prompts and use all defaults")
 	rootCmd.AddCommand(initCmd)
 }

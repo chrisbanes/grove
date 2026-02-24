@@ -17,7 +17,7 @@ var updateCmd = &cobra.Command{
 	Short: "Pull latest and rebuild the golden copy",
 	Long:  `Convenience command to refresh the golden copy: git pull + warmup command.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		progressEnabled, _ := cmd.Flags().GetBool("progress")
+		progressEnabled := resolveProgress(cmd)
 		var progress *progressRenderer
 		if progressEnabled {
 			progress = newProgressRenderer(os.Stderr, isTerminalFile(os.Stderr), "update")
@@ -90,6 +90,6 @@ var updateCmd = &cobra.Command{
 }
 
 func init() {
-	updateCmd.Flags().Bool("progress", false, "Show progress output during image backend refresh")
+	updateCmd.Flags().Bool("progress", false, "Show progress output (default: auto-detect TTY)")
 	rootCmd.AddCommand(updateCmd)
 }

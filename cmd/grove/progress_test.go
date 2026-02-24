@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestProgressState_NonDecreasing(t *testing.T) {
@@ -94,4 +96,35 @@ func TestNewFancyProgress_UsesCustomLabel(t *testing.T) {
 	}
 	r.Update(15, "syncing")
 	r.Done()
+}
+
+func TestResolveProgress_FallsBackToTTYDetection(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("progress", false, "")
+	// Flag not changed — should fall back to isTerminalFile(os.Stderr).
+	// In test, stderr is typically not a TTY, so expect false.
+	got := resolveProgress(cmd)
+	if got {
+		t.Fatal("expected false when stderr is not a TTY and flag not set")
+	}
+}
+
+func TestResolveProgress_RespectsExplicitTrue(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("progress", false, "")
+	_ = cmd.Flags().Set("progress", "true")
+	got := resolveProgress(cmd)
+	if !got {
+		t.Fatal("expected true when --progress explicitly set")
+	}
+}
+
+func TestResolveProgress_RespectsExplicitFalse(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("progress", false, "")
+	_ = cmd.Flags().Set("progress", "false")
+	got := resolveProgress(cmd)
+	if got {
+		t.Fatal("expected false when --progress=false explicitly set")
+	}
 }
