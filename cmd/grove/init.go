@@ -86,11 +86,6 @@ Creates a .grove/ directory with config and optional hooks.`,
 			return fmt.Errorf("invalid --backend %q: expected cp or image", backend)
 		}
 		cfg.CloneBackend = backend
-		runtimeID, err := config.GenerateRuntimeID()
-		if err != nil {
-			return fmt.Errorf("generating runtime ID: %w", err)
-		}
-		cfg.RuntimeID = runtimeID
 
 		if err := config.Save(absPath, cfg); err != nil {
 			return fmt.Errorf("saving config: %w", err)
