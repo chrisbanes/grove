@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mandelsoft/ttyprogress"
+	"github.com/spf13/cobra"
 )
 
 type progressState struct {
@@ -182,6 +183,17 @@ func clampPercent(v int) int {
 		return 100
 	}
 	return v
+}
+
+// resolveProgress returns whether progress output should be enabled.
+// If the user explicitly set --progress or --progress=false, that value wins.
+// Otherwise, progress is enabled when stderr is a TTY.
+func resolveProgress(cmd *cobra.Command) bool {
+	if cmd.Flags().Changed("progress") {
+		v, _ := cmd.Flags().GetBool("progress")
+		return v
+	}
+	return isTerminalFile(os.Stderr)
 }
 
 func isTerminalFile(f *os.File) bool {
