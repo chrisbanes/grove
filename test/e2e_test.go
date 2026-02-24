@@ -75,6 +75,7 @@ func grove(t *testing.T, binary, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = dir
+	cmd.Stdin = bytes.NewReader(nil) // ensure non-interactive mode
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("grove %v failed: %s\n%s", args, err, out)
@@ -86,6 +87,7 @@ func groveOutErr(t *testing.T, binary, dir string, args ...string) (string, stri
 	t.Helper()
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = dir
+	cmd.Stdin = bytes.NewReader(nil) // ensure non-interactive mode
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -102,6 +104,7 @@ func groveExpectErr(t *testing.T, binary, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = dir
+	cmd.Stdin = bytes.NewReader(nil) // ensure non-interactive mode
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("grove %v succeeded but expected failure.\nOutput: %s", args, out)
@@ -489,9 +492,10 @@ func TestInitEdgeCases(t *testing.T) {
 	t.Run("already-initialized", func(t *testing.T) {
 		repo := setupTestRepo(t)
 		grove(t, binary, repo, "init")
-		out := groveExpectErr(t, binary, repo, "init")
-		if !strings.Contains(out, "grove already initialized") {
-			t.Errorf("expected 'grove already initialized', got: %s", out)
+		// Re-running init should succeed (update config, not error)
+		out := grove(t, binary, repo, "init")
+		if !strings.Contains(out, "Grove initialized") {
+			t.Errorf("expected 'Grove initialized' on re-init, got: %s", out)
 		}
 	})
 
