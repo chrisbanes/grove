@@ -39,9 +39,6 @@ type Config struct {
 	MaxWorkspaces int      `json:"max_workspaces"`
 	Exclude       []string `json:"exclude,omitempty"`
 	CloneBackend  string   `json:"clone_backend,omitempty"`
-	// RuntimeID is read for backward compatibility with older configs.
-	// New configs persist runtime IDs in .grove/.runtime-id instead.
-	RuntimeID string `json:"runtime_id,omitempty"`
 }
 
 func DefaultConfig(projectName string) *Config {
@@ -56,6 +53,13 @@ func Load(repoRoot string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("grove not initialized: %w", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	if _, hasLegacyRuntimeID := raw["runtime_id"]; hasLegacyRuntimeID {
+		return nil, fmt.Errorf("runtime_id in %s is no longer supported; remove it and rerun", path)
 	}
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
@@ -74,9 +78,6 @@ func Load(repoRoot string) (*Config, error) {
 		return nil, err
 	}
 	cfg.CloneBackend = backend
-	if cfg.RuntimeID != "" && !runtimeIDPattern.MatchString(cfg.RuntimeID) {
-		return nil, fmt.Errorf("invalid runtime_id %q: expected lowercase letters and numbers", cfg.RuntimeID)
-	}
 	return &cfg, nil
 }
 
@@ -168,18 +169,6 @@ func saveRuntimeID(repoRoot, runtimeID string) error {
 	return os.WriteFile(filepath.Join(groveDir, runtimeIDFile), []byte(runtimeID+"\n"), 0644)
 }
 
-func clearLegacyRuntimeIDFromConfig(repoRoot string) error {
-	cfg, err := Load(repoRoot)
-	if err != nil {
-		return err
-	}
-	if cfg.RuntimeID == "" {
-		return nil
-	}
-	cfg.RuntimeID = ""
-	return Save(repoRoot, cfg)
-}
-
 // ImageRuntimeRoot returns the directory that stores image backend runtime data
 // (base image, shadows, mount metadata) for this repository.
 func ImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
@@ -193,9 +182,6 @@ func ImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
 		return runtimeRootForID(workspaceDir, runtimeID), nil
 	case !errors.Is(err, os.ErrNotExist):
 		return "", err
-	}
-	if cfg.RuntimeID != "" {
-		return runtimeRootForID(workspaceDir, cfg.RuntimeID), nil
 	}
 	return legacyImageRuntimeRoot(repoRoot, cfg)
 }
@@ -212,20 +198,11 @@ func EnsureImageRuntimeRoot(repoRoot string, cfg *Config) (string, error) {
 		if !errors.Is(err, os.ErrNotExist) {
 			return "", err
 		}
-		if cfg.RuntimeID != "" {
-			runtimeID = cfg.RuntimeID
-		} else {
-			runtimeID, err = GenerateRuntimeID()
-			if err != nil {
-				return "", err
-			}
-		}
-		if err := saveRuntimeID(repoRoot, runtimeID); err != nil {
+		runtimeID, err = GenerateRuntimeID()
+		if err != nil {
 			return "", err
 		}
-	}
-	if cfg.RuntimeID != "" {
-		if err := clearLegacyRuntimeIDFromConfig(repoRoot); err != nil {
+		if err := saveRuntimeID(repoRoot, runtimeID); err != nil {
 			return "", err
 		}
 	}

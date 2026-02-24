@@ -46,31 +46,6 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 }
 
-func TestSave_DoesNotPersistRuntimeID(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".grove"), 0755); err != nil {
-		t.Fatalf("mkdir .grove: %v", err)
-	}
-
-	cfg := &config.Config{
-		WorkspaceDir:  "/tmp/grove/test",
-		MaxWorkspaces: 5,
-		CloneBackend:  "image",
-		RuntimeID:     "abc123",
-	}
-	if err := config.Save(dir, cfg); err != nil {
-		t.Fatalf("Save() error = %v", err)
-	}
-
-	data, err := os.ReadFile(filepath.Join(dir, ".grove", "config.json"))
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	if strings.Contains(string(data), `"runtime_id"`) {
-		t.Fatalf("expected runtime_id to be omitted from config.json, got:\n%s", string(data))
-	}
-}
-
 func TestLoad_Defaults(t *testing.T) {
 	dir := t.TempDir()
 	groveDir := filepath.Join(dir, ".grove")
@@ -91,6 +66,26 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	if cfg.CloneBackend != "cp" {
 		t.Errorf("expected default clone_backend cp, got %q", cfg.CloneBackend)
+	}
+}
+
+func TestLoad_RuntimeIDNoLongerSupported(t *testing.T) {
+	dir := t.TempDir()
+	groveDir := filepath.Join(dir, ".grove")
+	os.MkdirAll(groveDir, 0755)
+
+	os.WriteFile(
+		filepath.Join(groveDir, "config.json"),
+		[]byte(`{"workspace_dir": "/tmp/test", "runtime_id": "abc123"}`),
+		0644,
+	)
+
+	_, err := config.Load(dir)
+	if err == nil {
+		t.Fatal("expected error for legacy runtime_id")
+	}
+	if !strings.Contains(err.Error(), "runtime_id") {
+		t.Fatalf("expected runtime_id guidance, got: %v", err)
 	}
 }
 
@@ -214,24 +209,6 @@ func TestImageRuntimeRoot_UsesRuntimeIDFile(t *testing.T) {
 	}
 }
 
-func TestImageRuntimeRoot_UsesLegacyRuntimeIDFromConfig(t *testing.T) {
-	repo := filepath.Join(t.TempDir(), "My-Repo")
-	if err := os.MkdirAll(repo, 0755); err != nil {
-		t.Fatalf("mkdir repo: %v", err)
-	}
-	workspaceDir := filepath.Join(t.TempDir(), "workspaces", "{project}")
-	cfg := &config.Config{WorkspaceDir: workspaceDir, RuntimeID: "abc123"}
-
-	root, err := config.ImageRuntimeRoot(repo, cfg)
-	if err != nil {
-		t.Fatalf("ImageRuntimeRoot() error = %v", err)
-	}
-	want := filepath.Join(filepath.Dir(workspaceDir), "My-Repo", "runtimes", "abc123")
-	if root != want {
-		t.Fatalf("expected runtime root %q, got %q", want, root)
-	}
-}
-
 func TestImageRuntimeRoot_WithoutRuntimeIDFallsBackToLegacyPath(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "My-Repo")
 	if err := os.MkdirAll(repo, 0755); err != nil {
@@ -301,51 +278,6 @@ func TestEnsureImageRuntimeRoot_AssignsRuntimeIDAndMigratesLegacyDir(t *testing.
 	}
 	if strings.Contains(string(configRaw), `"runtime_id"`) {
 		t.Fatalf("expected runtime_id to be moved out of config.json, got:\n%s", string(configRaw))
-	}
-}
-
-func TestEnsureImageRuntimeRoot_MigratesLegacyRuntimeIDFromConfigToFile(t *testing.T) {
-	repo := filepath.Join(t.TempDir(), "My-Repo")
-	if err := os.MkdirAll(filepath.Join(repo, ".grove"), 0755); err != nil {
-		t.Fatalf("mkdir .grove: %v", err)
-	}
-	configJSON := `{
-  "workspace_dir": "/tmp/grove/{project}",
-  "max_workspaces": 10,
-  "clone_backend": "image",
-  "runtime_id": "legacy123"
-}`
-	if err := os.WriteFile(filepath.Join(repo, ".grove", "config.json"), []byte(configJSON), 0644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	cfg, err := config.Load(repo)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.RuntimeID != "legacy123" {
-		t.Fatalf("expected legacy runtime_id loaded from config, got %q", cfg.RuntimeID)
-	}
-
-	runtimeRoot, err := config.EnsureImageRuntimeRoot(repo, cfg)
-	if err != nil {
-		t.Fatalf("EnsureImageRuntimeRoot() error = %v", err)
-	}
-	runtimeID, err := config.LoadRuntimeID(repo)
-	if err != nil {
-		t.Fatalf("LoadRuntimeID() error = %v", err)
-	}
-	if runtimeID != "legacy123" {
-		t.Fatalf("expected runtime id file to keep legacy id, got %q", runtimeID)
-	}
-	if !strings.HasSuffix(runtimeRoot, filepath.Join("runtimes", "legacy123")) {
-		t.Fatalf("expected runtime root to use migrated runtime id, got %q", runtimeRoot)
-	}
-	configRaw, err := os.ReadFile(filepath.Join(repo, ".grove", "config.json"))
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	if strings.Contains(string(configRaw), `"runtime_id"`) {
-		t.Fatalf("expected runtime_id removed from config.json, got:\n%s", string(configRaw))
 	}
 }
 
