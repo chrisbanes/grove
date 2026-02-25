@@ -116,22 +116,31 @@ func Save(repoRoot string, cfg *Config) error {
 	if err := os.MkdirAll(groveDir, 0755); err != nil {
 		return err
 	}
+	defaults := DefaultConfig("")
 	type persistedConfig struct {
 		WarmupCommand string   `json:"warmup_command,omitempty"`
 		WorkspaceDir  string   `json:"workspace_dir"`
 		StateDir      string   `json:"state_dir,omitempty"`
-		MaxWorkspaces int      `json:"max_workspaces"`
+		MaxWorkspaces int      `json:"max_workspaces,omitempty"`
 		Exclude       []string `json:"exclude,omitempty"`
 		CloneBackend  string   `json:"clone_backend,omitempty"`
 	}
-	data, err := json.MarshalIndent(&persistedConfig{
+	pc := persistedConfig{
 		WarmupCommand: cfg.WarmupCommand,
 		WorkspaceDir:  cfg.WorkspaceDir,
-		StateDir:      cfg.StateDir,
-		MaxWorkspaces: cfg.MaxWorkspaces,
 		Exclude:       cfg.Exclude,
-		CloneBackend:  cfg.CloneBackend,
-	}, "", "  ")
+	}
+	// Only persist non-default values
+	if cfg.StateDir != defaults.StateDir {
+		pc.StateDir = cfg.StateDir
+	}
+	if cfg.MaxWorkspaces != defaults.MaxWorkspaces {
+		pc.MaxWorkspaces = cfg.MaxWorkspaces
+	}
+	if cfg.CloneBackend != "" && cfg.CloneBackend != "cp" {
+		pc.CloneBackend = cfg.CloneBackend
+	}
+	data, err := json.MarshalIndent(&pc, "", "  ")
 	if err != nil {
 		return err
 	}

@@ -898,3 +898,87 @@ func TestMigrateRuntimesToStateDir_NoRuntimes(t *testing.T) {
 		t.Fatal("expected no migration when no runtimes/ exists")
 	}
 }
+
+func TestSave_OmitsDefaultStateDir(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+
+	cfg := &config.Config{
+		WorkspaceDir:  "~/grove-workspaces/{project}",
+		StateDir:      "~/.grove",
+		MaxWorkspaces: 10,
+	}
+	if err := config.Save(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".grove", "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if strings.Contains(content, `"state_dir"`) {
+		t.Fatalf("expected state_dir to be omitted when default, got:\n%s", content)
+	}
+	if strings.Contains(content, `"max_workspaces"`) {
+		t.Fatalf("expected max_workspaces to be omitted when default, got:\n%s", content)
+	}
+	if !strings.Contains(content, `"workspace_dir"`) {
+		t.Fatalf("expected workspace_dir to always be present, got:\n%s", content)
+	}
+}
+
+func TestSave_IncludesNonDefaultValues(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+
+	cfg := &config.Config{
+		WorkspaceDir:  "~/grove-workspaces/{project}",
+		StateDir:      "/custom/state",
+		MaxWorkspaces: 5,
+	}
+	if err := config.Save(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".grove", "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `"state_dir"`) {
+		t.Fatalf("expected non-default state_dir to be present, got:\n%s", content)
+	}
+	if !strings.Contains(content, `"max_workspaces"`) {
+		t.Fatalf("expected non-default max_workspaces to be present, got:\n%s", content)
+	}
+}
+
+func TestSave_RoundTripsWithDefaults(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".grove"), 0755)
+
+	cfg := &config.Config{
+		WorkspaceDir:  "~/grove-workspaces/{project}",
+		StateDir:      "~/.grove",
+		MaxWorkspaces: 10,
+		CloneBackend:  "cp",
+	}
+	if err := config.Save(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.StateDir != "~/.grove" {
+		t.Errorf("expected state_dir ~.grove after round-trip, got %q", loaded.StateDir)
+	}
+	if loaded.MaxWorkspaces != 10 {
+		t.Errorf("expected max_workspaces 10 after round-trip, got %d", loaded.MaxWorkspaces)
+	}
+	if loaded.CloneBackend != "cp" {
+		t.Errorf("expected clone_backend cp after round-trip, got %q", loaded.CloneBackend)
+	}
+}
