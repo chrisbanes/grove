@@ -30,6 +30,10 @@ func InitBase(runtimeRoot, goldenRoot string, runner Runner, baseSizeGB int, exc
 	}()
 
 	basePath := baseImagePath(runtimeRoot)
+	// Remove any stale sparsebundle left from a previously interrupted init.
+	if err := os.RemoveAll(basePath); err != nil {
+		return nil, err
+	}
 	if onProgress != nil {
 		onProgress(0, "creating base image")
 	}
