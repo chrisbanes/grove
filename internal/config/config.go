@@ -203,6 +203,12 @@ func MigrateRuntimesToStateDir(cfg *Config) (bool, error) {
 		return false, nil
 	}
 
+	// If the destination already exists, the migration was already done
+	// (or runtimes were created directly at the new location). Skip.
+	if info, err := os.Stat(newRuntimes); err == nil && info.IsDir() {
+		return false, nil
+	}
+
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
 		return false, err
 	}

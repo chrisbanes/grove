@@ -849,6 +849,38 @@ func TestMigrateRuntimesToStateDir(t *testing.T) {
 	}
 }
 
+func TestMigrateRuntimesToStateDir_DestinationExists(t *testing.T) {
+	oldWorkspaceDir := filepath.Join(t.TempDir(), "old-workspaces")
+	oldRuntimes := filepath.Join(oldWorkspaceDir, "runtimes", "abc123", "images")
+	os.MkdirAll(oldRuntimes, 0755)
+	os.WriteFile(filepath.Join(oldRuntimes, "state.json"), []byte(`{"old":true}`), 0644)
+
+	stateDir := filepath.Join(t.TempDir(), "state")
+	// Pre-create the destination runtimes dir with different content
+	newRuntimes := filepath.Join(stateDir, "runtimes", "def456", "images")
+	os.MkdirAll(newRuntimes, 0755)
+	os.WriteFile(filepath.Join(newRuntimes, "state.json"), []byte(`{"new":true}`), 0644)
+
+	cfg := &config.Config{
+		WorkspaceDir: oldWorkspaceDir,
+		StateDir:     stateDir,
+	}
+
+	migrated, err := config.MigrateRuntimesToStateDir(cfg)
+	if err != nil {
+		t.Fatalf("MigrateRuntimesToStateDir() error = %v", err)
+	}
+	if migrated {
+		t.Fatal("expected no migration when destination already exists")
+	}
+
+	// Existing destination content should be preserved
+	newStateFile := filepath.Join(stateDir, "runtimes", "def456", "images", "state.json")
+	if _, err := os.Stat(newStateFile); err != nil {
+		t.Fatalf("expected existing state file preserved at %s: %v", newStateFile, err)
+	}
+}
+
 func TestMigrateRuntimesToStateDir_NoRuntimes(t *testing.T) {
 	oldWorkspaceDir := filepath.Join(t.TempDir(), "workspaces")
 	os.MkdirAll(oldWorkspaceDir, 0755)
