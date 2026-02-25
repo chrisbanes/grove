@@ -2,6 +2,7 @@ package image
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -322,6 +323,56 @@ func TestSyncBase_NilExcludes(t *testing.T) {
 	}
 	if strings.Join(call.args, " ") != strings.Join(want, " ") {
 		t.Fatalf("unexpected args\nwant: %v\ngot:  %v", want, call.args)
+	}
+}
+
+// exitError simulates an *exec.ExitError with a specific exit code.
+type exitError struct {
+	code int
+}
+
+func (e *exitError) Error() string  { return fmt.Sprintf("exit status %d", e.code) }
+func (e *exitError) ExitCode() int  { return e.code }
+
+func TestSyncBase_ToleratesRsyncExitCode24(t *testing.T) {
+	r := &fakeRunner{
+		outputs: [][]byte{[]byte("some files vanished before transfer")},
+		errs:    []error{&exitError{code: 24}},
+	}
+	err := SyncBase(r, "/src", "/dst", nil)
+	if err != nil {
+		t.Fatalf("SyncBase() should tolerate exit code 24, got error: %v", err)
+	}
+}
+
+func TestSyncBase_StillFailsOnOtherRsyncErrors(t *testing.T) {
+	r := &fakeRunner{
+		outputs: [][]byte{[]byte("rsync error")},
+		errs:    []error{&exitError{code: 23}},
+	}
+	err := SyncBase(r, "/src", "/dst", nil)
+	if err == nil {
+		t.Fatal("SyncBase() should fail on exit code 23")
+	}
+}
+
+func TestSyncBaseWithProgress_ToleratesRsyncExitCode24(t *testing.T) {
+	r := &fakeRunner{
+		streamErr: &exitError{code: 24},
+	}
+	err := SyncBaseWithProgress(r, "/src", "/dst", nil, nil)
+	if err != nil {
+		t.Fatalf("SyncBaseWithProgress() should tolerate exit code 24, got error: %v", err)
+	}
+}
+
+func TestSyncBaseWithProgress_StillFailsOnOtherRsyncErrors(t *testing.T) {
+	r := &fakeRunner{
+		streamErr: &exitError{code: 23},
+	}
+	err := SyncBaseWithProgress(r, "/src", "/dst", nil, nil)
+	if err == nil {
+		t.Fatal("SyncBaseWithProgress() should fail on exit code 23")
 	}
 }
 

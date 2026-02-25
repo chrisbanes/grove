@@ -2,6 +2,7 @@ package image
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -170,7 +171,7 @@ func SyncBaseWithProgress(r Runner, src, dst string, excludes []string, onPercen
 		args = append(args, "--exclude", pattern)
 	}
 	args = append(args, src, dst)
-	return r.Stream("rsync", args, func(line string) {
+	err := r.Stream("rsync", args, func(line string) {
 		if onPercent == nil {
 			return
 		}
@@ -178,6 +179,10 @@ func SyncBaseWithProgress(r Runner, src, dst string, excludes []string, onPercen
 			onPercent(pct)
 		}
 	})
+	if err != nil && isRsyncVanishedErr(err) {
+		return nil
+	}
+	return err
 }
 
 func SyncBase(r Runner, src, dst string, excludes []string) error {
@@ -198,7 +203,11 @@ func SyncBase(r Runner, src, dst string, excludes []string) error {
 		args = append(args, "--exclude", pattern)
 	}
 	args = append(args, src, dst)
-	return run(r, "rsync", args...)
+	err := run(r, "rsync", args...)
+	if err != nil && isRsyncVanishedErr(err) {
+		return nil
+	}
+	return err
 }
 
 func run(r Runner, name string, args ...string) error {
@@ -207,6 +216,26 @@ func run(r Runner, name string, args ...string) error {
 		return fmt.Errorf("%s %s failed: %w\n%s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// rsyncExitCodeVanished is the rsync exit code for "some files vanished
+// before they could be transferred". This is expected when syncing a live
+// working directory and is safe to ignore.
+const rsyncExitCodeVanished = 24
+
+// exitCoder is implemented by *exec.ExitError and test fakes.
+type exitCoder interface {
+	ExitCode() int
+}
+
+// isRsyncVanishedErr reports whether err is an rsync exit code 24
+// ("partial transfer due to vanished source files"), which is benign.
+func isRsyncVanishedErr(err error) bool {
+	var ec exitCoder
+	if errors.As(err, &ec) {
+		return ec.ExitCode() == rsyncExitCodeVanished
+	}
+	return false
 }
 
 func ensureTrailingSlash(path string) string {
