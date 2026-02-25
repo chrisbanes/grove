@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
-	"github.com/mandelsoft/ttyprogress"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
 
@@ -30,17 +28,12 @@ func (s *progressState) updateClone(copied, total int) {
 }
 
 type progressRenderer struct {
-	w            io.Writer
-	tty          bool
-	lastPercent  int
-	lastPhase    string
-	ttyContext   ttyprogress.Context
-	ttyBar       ttyprogress.Bar
-	lastWidth    int
-	wroteTTYLine bool
+	w           io.Writer
+	tty         bool
+	lastPercent int
+	lastPhase   string
+	bar         *progressbar.ProgressBar
 }
-
-const progressPhaseVariable = "phase"
 
 func newProgressRenderer(w io.Writer, tty bool, label string) *progressRenderer {
 	r := &progressRenderer{
@@ -49,71 +42,34 @@ func newProgressRenderer(w io.Writer, tty bool, label string) *progressRenderer 
 		lastPercent: -1,
 	}
 	if tty {
-		if _, ok := w.(*os.File); ok {
-			ctx, bar, err := newFancyProgress(w, label)
-			if err == nil {
-				r.ttyContext = ctx
-				r.ttyBar = bar
-			}
-		}
+		r.bar = progressbar.NewOptions(100,
+			progressbar.OptionSetWriter(w),
+			progressbar.OptionSetDescription(label),
+			progressbar.OptionSetWidth(30),
+			progressbar.OptionSetElapsedTime(true),
+			progressbar.OptionSetPredictTime(false),
+			progressbar.OptionClearOnFinish(),
+			progressbar.OptionSetRenderBlankState(true),
+			progressbar.OptionUseANSICodes(true),
+		)
 	}
 	return r
 }
 
-func newFancyProgress(w io.Writer, label string) (ttyprogress.Context, ttyprogress.Bar, error) {
-	ctx := ttyprogress.For(w)
-	bar, err := ttyprogress.NewBar().
-		SetPredefined(10).
-		SetTotal(100).
-		SetWidth(ttyprogress.ReserveTerminalSize(45)).
-		PrependElapsed().
-		PrependMessage(label).
-		AppendCompleted().
-		AppendMessage("phase:").
-		AppendVariable(progressPhaseVariable).
-		Add(ctx)
-	if err != nil {
-		_ = ctx.Close()
-		_ = ctx.Wait(context.Background())
-		return nil, nil, err
-	}
-	return ctx, bar, nil
-}
-
 func (r *progressRenderer) Update(percent int, phase string) {
 	percent = clampPercent(percent)
-	if r.ttyBar != nil {
-		if percent == r.lastPercent && phase == r.lastPhase {
-			return
-		}
-		phaseChanged := phase != r.lastPhase
-		r.lastPercent = percent
-		r.lastPhase = phase
-		r.ttyBar.SetVariable(progressPhaseVariable, phase)
-		r.ttyBar.Set(percent)
-		if phaseChanged {
-			_ = r.ttyBar.Flush()
-		}
-		return
-	}
-
-	if r.tty {
+	if r.bar != nil {
 		if percent == r.lastPercent && phase == r.lastPhase {
 			return
 		}
 		r.lastPercent = percent
 		r.lastPhase = phase
-		r.wroteTTYLine = true
-		line := fmt.Sprintf("\r[%s] %3d%% %s", renderBar(percent, 24), percent, phase)
-		width := len(line) - 1 // exclude leading carriage return
-		if r.lastWidth > width {
-			line += strings.Repeat(" ", r.lastWidth-width)
-		}
-		r.lastWidth = width
-		fmt.Fprint(r.w, line)
+		r.bar.Describe(phase)
+		_ = r.bar.Set(percent)
 		return
 	}
 
+	// Non-TTY: emit line-based progress at meaningful intervals.
 	emit := false
 	if phase != r.lastPhase {
 		emit = true
@@ -133,29 +89,10 @@ func (r *progressRenderer) Update(percent int, phase string) {
 }
 
 func (r *progressRenderer) Done() {
-	if r.ttyContext != nil {
-		if r.ttyBar != nil && !r.ttyBar.IsClosed() {
-			_ = r.ttyBar.Close()
-		}
-		_ = r.ttyContext.Close()
-		_ = r.ttyContext.Wait(context.Background())
+	if r.bar != nil {
+		_ = r.bar.Finish()
 		return
 	}
-
-	if r.tty && r.wroteTTYLine {
-		fmt.Fprintln(r.w)
-	}
-}
-
-func renderBar(percent, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	filled := (clampPercent(percent) * width) / 100
-	if filled > width {
-		filled = width
-	}
-	return strings.Repeat("#", filled) + strings.Repeat("-", width-filled)
 }
 
 func mapPercent(copied, total, min, max int) int {
