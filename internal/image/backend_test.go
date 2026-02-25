@@ -137,6 +137,49 @@ func TestInitBase_CallsOnProgress(t *testing.T) {
 	}
 }
 
+func TestInitBase_RemovesStaleSparsebundle(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	// Pre-create a stale sparsebundle (directory, since .sparsebundle is a bundle dir)
+	stalePath := filepath.Join(repoRoot, "images", "base.sparsebundle")
+	if err := os.MkdirAll(stalePath, 0755); err != nil {
+		t.Fatalf("creating stale sparsebundle: %v", err)
+	}
+	// Put a marker file inside so it's a non-empty directory
+	if err := os.WriteFile(filepath.Join(stalePath, "token"), []byte("stale"), 0644); err != nil {
+		t.Fatalf("writing marker: %v", err)
+	}
+
+	r := &fakeRunner{
+		outputs: [][]byte{
+			nil, // CreateSparseBundle
+			[]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>system-entities</key>
+  <array>
+    <dict><key>dev-entry</key><string>/dev/disk9</string></dict>
+    <dict><key>dev-entry</key><string>/dev/disk9s1</string><key>mount-point</key><string>` + filepath.Join(repoRoot, "mnt", "base") + `</string></dict>
+  </array>
+</dict>
+</plist>`), // Attach
+		},
+	}
+
+	st, err := InitBase(repoRoot, repoRoot, r, 20, nil, nil)
+	if err != nil {
+		t.Fatalf("InitBase() error = %v", err)
+	}
+	if st.Backend != "image" {
+		t.Fatalf("expected backend image, got %q", st.Backend)
+	}
+
+	// Verify the stale marker file no longer exists (proves the old dir was removed)
+	if _, err := os.Stat(filepath.Join(stalePath, "token")); !os.IsNotExist(err) {
+		t.Fatalf("expected stale sparsebundle contents to be removed, but marker file still exists")
+	}
+}
+
 func TestRefreshBase_CallsOnProgress(t *testing.T) {
 	repoRoot := t.TempDir()
 	basePath := filepath.Join(repoRoot, "images", "base.sparsebundle")
