@@ -50,9 +50,11 @@ func Pull(path string) error {
 		return nil
 	}
 
+	outStr := string(out)
+
 	// If the current branch has no upstream configured, retry by explicitly
 	// pulling the current branch from a sensible remote and then restore tracking.
-	if strings.Contains(string(out), "There is no tracking information for the current branch.") {
+	if strings.Contains(outStr, "There is no tracking information for the current branch.") {
 		branch, branchErr := CurrentBranch(path)
 		if branchErr != nil || branch == "" {
 			return fmt.Errorf("git pull: %w\n%s", err, out)
@@ -77,7 +79,49 @@ func Pull(path string) error {
 		return nil
 	}
 
+	// If the tracked remote ref has been deleted, check out the remote's
+	// default branch and pull that instead.
+	if strings.Contains(outStr, "couldn't find remote ref") ||
+		strings.Contains(outStr, "no such ref was fetched") {
+		return pullDefaultBranch(path)
+	}
+
 	return fmt.Errorf("git pull: %w\n%s", err, out)
+}
+
+// pullDefaultBranch checks out the remote's default branch and pulls it.
+func pullDefaultBranch(path string) error {
+	defaultBranch, err := remoteDefaultBranch(path, "origin")
+	if err != nil {
+		return fmt.Errorf("git pull: upstream ref deleted and cannot determine default branch: %w", err)
+	}
+
+	if err := Checkout(path, defaultBranch, false); err != nil {
+		return fmt.Errorf("git pull: upstream ref deleted, failed to checkout %s: %w", defaultBranch, err)
+	}
+
+	pullCmd := exec.Command("git", "-C", path, "pull")
+	pullOut, pullErr := pullCmd.CombinedOutput()
+	if pullErr != nil {
+		return fmt.Errorf("git pull: %w\n%s", pullErr, pullOut)
+	}
+	return nil
+}
+
+// remoteDefaultBranch returns the default branch name for a remote (e.g. "main").
+func remoteDefaultBranch(path, remote string) (string, error) {
+	cmd := exec.Command("git", "-C", path, "symbolic-ref", "refs/remotes/"+remote+"/HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	// Output is like "refs/remotes/origin/main" — extract the branch name.
+	ref := strings.TrimSpace(string(out))
+	prefix := "refs/remotes/" + remote + "/"
+	if strings.HasPrefix(ref, prefix) {
+		return strings.TrimPrefix(ref, prefix), nil
+	}
+	return "", fmt.Errorf("unexpected symbolic-ref output: %s", ref)
 }
 
 func pullRemote(path, branch string) (string, error) {
