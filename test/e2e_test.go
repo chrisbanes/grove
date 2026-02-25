@@ -121,10 +121,13 @@ func TestCreateWithoutConfig(t *testing.T) {
 	repo := setupTestRepo(t)
 
 	// Skip grove config entirely — go straight to create
-	out := grove(t, binary, repo, "create", "--json")
+	stdout, stderr := groveOutErr(t, binary, repo, "create", "--json")
+	if stderr != "" {
+		t.Fatalf("expected empty stderr in --json mode without --progress, got: %s", stderr)
+	}
 	var info workspace.Info
-	if err := json.Unmarshal([]byte(out), &info); err != nil {
-		t.Fatalf("invalid JSON output: %s\n%s", err, out)
+	if err := json.Unmarshal([]byte(stdout), &info); err != nil {
+		t.Fatalf("invalid JSON output: %s\n%s", err, stdout)
 	}
 	if info.ID == "" || info.Path == "" {
 		t.Fatal("missing ID or Path in output")
@@ -144,9 +147,30 @@ func TestCreateWithoutConfig(t *testing.T) {
 		t.Error(".grove/ not created lazily")
 	}
 
-	// No config.json should exist (that requires explicit config)
-	if _, err := os.Stat(filepath.Join(repo, ".grove", "config.json")); err == nil {
-		t.Error("config.json should not exist without explicit init")
+	cfgPath := filepath.Join(repo, ".grove", "config.json")
+	if _, err := os.Stat(cfgPath); err != nil {
+		t.Fatalf("config.json should exist after first create: %v", err)
+	}
+
+	cfgData, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("failed to read config.json: %v", err)
+	}
+	var cfgJSON map[string]any
+	if err := json.Unmarshal(cfgData, &cfgJSON); err != nil {
+		t.Fatalf("failed to parse config.json: %v\n%s", err, string(cfgData))
+	}
+	if _, ok := cfgJSON["workspace_dir"]; !ok {
+		t.Error("config.json should include workspace_dir")
+	}
+	if _, ok := cfgJSON["max_workspaces"]; ok {
+		t.Error("config.json should omit default max_workspaces")
+	}
+	if _, ok := cfgJSON["state_dir"]; ok {
+		t.Error("config.json should omit default state_dir")
+	}
+	if _, ok := cfgJSON["clone_backend"]; ok {
+		t.Error("config.json should omit default clone_backend")
 	}
 
 	// List should work
@@ -162,6 +186,51 @@ func TestCreateWithoutConfig(t *testing.T) {
 	grove(t, binary, repo, "destroy", info.ID)
 	if _, err := os.Stat(info.Path); !os.IsNotExist(err) {
 		t.Error("workspace not cleaned up")
+	}
+}
+
+func TestCreateFirstRunShowsInitNotice(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+
+	stdout, stderr := groveOutErr(t, binary, repo, "create")
+
+	expectedNotice := "Initialized Grove config at .grove/config.json using defaults. Run `grove config` to customize."
+	if !strings.Contains(stderr, expectedNotice) {
+		t.Fatalf("expected first-run init notice in stderr, got: %s", stderr)
+	}
+	if !strings.Contains(stdout, "Workspace created:") {
+		t.Fatalf("expected human-readable create output in stdout, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "Path:") {
+		t.Fatalf("expected workspace path in stdout, got: %s", stdout)
+	}
+
+	grove(t, binary, repo, "destroy", "--all")
+}
+
+func TestCreateWithMalformedConfigFails(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("APFS tests only run on macOS")
+	}
+
+	binary := buildGrove(t)
+	repo := setupTestRepo(t)
+
+	if err := os.MkdirAll(filepath.Join(repo, ".grove"), 0755); err != nil {
+		t.Fatalf("failed to create .grove directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "config.json"), []byte("{"), 0644); err != nil {
+		t.Fatalf("failed to write malformed config: %v", err)
+	}
+
+	errOut := groveExpectErr(t, binary, repo, "create")
+	if !strings.Contains(errOut, "invalid config") {
+		t.Fatalf("expected invalid config error, got: %s", errOut)
 	}
 }
 

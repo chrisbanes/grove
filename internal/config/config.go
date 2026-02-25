@@ -99,6 +99,34 @@ func LoadOrDefault(repoRoot string) (*Config, error) {
 	return Load(repoRoot)
 }
 
+// LoadOrInitMinimal loads config from .grove/config.json when present.
+// If missing, it initializes a minimal config and persists it.
+func LoadOrInitMinimal(repoRoot string) (*Config, bool, error) {
+	path := filepath.Join(repoRoot, GroveDirName, ConfigFile)
+	_, err := os.Stat(path)
+	if err == nil {
+		cfg, loadErr := Load(repoRoot)
+		if loadErr != nil {
+			return nil, false, loadErr
+		}
+		return cfg, false, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, false, err
+	}
+
+	projectName := filepath.Base(repoRoot)
+	cfg := DefaultConfig(projectName)
+	cfg.CloneBackend = "cp"
+	if err := EnsureMinimalGroveDir(repoRoot); err != nil {
+		return nil, false, err
+	}
+	if err := Save(repoRoot, cfg); err != nil {
+		return nil, false, err
+	}
+	return cfg, true, nil
+}
+
 func normalizeCloneBackend(value string) (string, error) {
 	if value == "" {
 		return "cp", nil

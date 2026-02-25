@@ -58,19 +58,23 @@ go install github.com/chrisbanes/grove/cmd/grove@latest
 
 ### Basic Workflow
 
-```bash
-# 1. Register your repo as a golden copy
-cd ~/dev/myproject
-grove config --warmup-command "./gradlew assemble"
+Start config-less: the first `grove create` in a git repo auto-initializes
+`.grove/config.json` with defaults. Run `grove config` afterward only if you
+want to customize settings.
 
-# 2. Create a workspace (instant CoW clone)
+```bash
+# 1. Create a workspace (first run auto-initializes .grove/config.json)
+cd ~/dev/myproject
 grove create --branch feature/new-login
 # Workspace created: feature-new-login-a1b2
-# Path: /tmp/grove/myproject/feature-new-login-a1b2
+# Path: /Users/you/grove-workspaces/myproject/feature-new-login-a1b2
 # Branch: feature/new-login
 
-# 3. Work in the workspace -- builds start warm
-cd /tmp/grove/myproject/feature-new-login-a1b2
+# 2. Optional: customize settings for future workspaces
+grove config --warmup-command "./gradlew assemble"
+
+# 3. Work in the workspace
+cd ~/grove-workspaces/myproject/feature-new-login-a1b2
 
 # 4. Clean up when done
 grove destroy feature-new-login-a1b2
@@ -95,7 +99,7 @@ grove config --backend image --image-size-gb 200
 | Flag | Description |
 |------|-------------|
 | `--warmup-command` | Shell command to warm build caches (runs during config and update) |
-| `--workspace-dir` | Directory for workspaces (default: `/tmp/grove/{project}`) |
+| `--workspace-dir` | Directory for workspaces (default: `~/grove-workspaces/{project}`) |
 | `--backend` | Workspace backend (`cp` default, `image` experimental) |
 | `--image-size-gb` | Base sparsebundle size in GB for `--backend image` |
 | `--force` | Proceed even if the golden copy has uncommitted changes |
@@ -110,15 +114,23 @@ Create a workspace from the golden copy using the configured backend:
 Without `--branch`, the workspace stays on the golden copy's current branch.
 With `--branch`, Grove creates and checks out a new git branch in the workspace.
 
+On first run in an unconfigured git repo, `grove create` auto-initializes
+`.grove/config.json` with default settings, then creates the workspace.
+Use `grove config` to customize settings later (warmup command,
+workspace location, backend, and more).
+
+With `--json`, Grove writes only JSON to `stdout` and does not print the
+auto-init note to `stderr`.
+
 ```bash
 grove create --branch feature/auth
 # Workspace created: feature-auth-f7e8
-# Path: /tmp/grove/myproject/feature-auth-f7e8
+# Path: /Users/you/grove-workspaces/myproject/feature-auth-f7e8
 # Branch: feature/auth
 
 grove create
 # Workspace created: main-d9c0
-# Path: /tmp/grove/myproject/main-d9c0
+# Path: /Users/you/grove-workspaces/myproject/main-d9c0
 ```
 
 For machine-readable output:
@@ -133,7 +145,7 @@ grove create --branch agent/fix-bug --json
   "golden_commit": "abc1234",
   "created_at": "2026-02-17T10:30:00Z",
   "branch": "agent/fix-bug",
-  "path": "/tmp/grove/myproject/agent-fix-bug-f7e8"
+  "path": "/Users/you/grove-workspaces/myproject/agent-fix-bug-f7e8"
 }
 ```
 
@@ -165,8 +177,8 @@ List active workspaces.
 ```bash
 grove list
 # ID                     BRANCH              CREATED    PATH
-# feature-auth-f7e8      feature/auth        5m ago     /tmp/grove/myproject/feature-auth-f7e8
-# feature-new-login-a1b2 feature/new-login   2h ago     /tmp/grove/myproject/feature-new-login-a1b2
+# feature-auth-f7e8      feature/auth        5m ago     /Users/you/grove-workspaces/myproject/feature-auth-f7e8
+# feature-new-login-a1b2 feature/new-login   2h ago     /Users/you/grove-workspaces/myproject/feature-new-login-a1b2
 ```
 
 | Flag | Description |
@@ -226,7 +238,7 @@ grove status
 # Status:      clean
 #
 # Workspaces:  2 / 10 (max)
-# Directory:   /tmp/grove/myproject
+# Directory:   /Users/you/grove-workspaces/myproject
 ```
 
 ### `grove version`
@@ -245,7 +257,7 @@ Grove stores its configuration in `.grove/config.json` inside the golden copy:
 ```json
 {
   "warmup_command": "./gradlew assemble",
-  "workspace_dir": "/tmp/grove/{project}",
+  "workspace_dir": "~/grove-workspaces/{project}",
   "max_workspaces": 10,
   "exclude": ["*.lock", "__pycache__", ".gradle/configuration-cache"],
   "clone_backend": "cp"
@@ -255,7 +267,7 @@ Grove stores its configuration in `.grove/config.json` inside the golden copy:
 | Field | Description | Default |
 |-------|-------------|---------|
 | `warmup_command` | Shell command to warm build caches. Runs during `grove config` and `grove update`. | *(none)* |
-| `workspace_dir` | Where workspaces are created. `{project}` expands to the golden copy's directory name. | `/tmp/grove/{project}` |
+| `workspace_dir` | Where workspaces are created. `{project}` expands to the golden copy's directory name. | `~/grove-workspaces/{project}` |
 | `max_workspaces` | Maximum concurrent workspaces. Prevents disk exhaustion. | `10` |
 | `exclude` | Glob patterns for files/directories to skip when cloning. See [Exclude Patterns](#exclude-patterns). | `[]` |
 | `clone_backend` | Workspace backend: `cp` (default) or `image` (experimental, macOS). | `cp` |
@@ -363,7 +375,7 @@ grove create --branch agent/fix-login --json
 # Parse JSON for workspace path
 
 # Agent works in the isolated workspace
-cd /tmp/grove/myproject/agent-fix-login-a1b2
+cd ~/grove-workspaces/myproject/agent-fix-login-a1b2
 # ... make changes, run tests ...
 
 # Push branch and clean up

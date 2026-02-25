@@ -26,6 +26,7 @@ Without --branch, the workspace stays on the golden copy's current branch.
 With --branch, a new git branch is created and checked out in the workspace.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		progressEnabled := resolveProgress(cmd)
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		var (
 			progressMu sync.Mutex
 			progress   *progressRenderer
@@ -61,9 +62,12 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 			return fmt.Errorf("cannot create a workspace from inside another workspace.\nRun this from the golden copy instead")
 		}
 
-		cfg, err := config.LoadOrDefault(goldenRoot)
+		cfg, initialized, err := config.LoadOrInitMinimal(goldenRoot)
 		if err != nil {
 			return err
+		}
+		if initialized && !jsonOut {
+			fmt.Fprintln(os.Stderr, "Initialized Grove config at .grove/config.json using defaults. Run `grove config` to customize.")
 		}
 
 		// Ensure .grove/ exists for runtime files
@@ -163,7 +167,6 @@ With --branch, a new git branch is created and checked out in the workspace.`,
 		updateProgress(100, "done")
 
 		// Output result
-		jsonOut, _ := cmd.Flags().GetBool("json")
 		if jsonOut {
 			data, _ := json.MarshalIndent(info, "", "  ")
 			fmt.Println(string(data))

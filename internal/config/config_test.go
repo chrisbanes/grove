@@ -618,6 +618,71 @@ func TestEnsureGroveGitignore_DoesNotOverwriteExisting(t *testing.T) {
 	}
 }
 
+func TestLoadOrInitMinimal_WritesConfigWhenMissing(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, config.GroveDirName, config.ConfigFile)
+
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no config before init, got err=%v", err)
+	}
+
+	cfg, initialized, err := config.LoadOrInitMinimal(dir)
+	if err != nil {
+		t.Fatalf("LoadOrInitMinimal() error = %v", err)
+	}
+	if !initialized {
+		t.Fatal("expected initialized=true when config is missing")
+	}
+	if cfg.WorkspaceDir == "" {
+		t.Fatal("expected non-empty workspace_dir")
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `"workspace_dir"`) {
+		t.Fatalf("expected workspace_dir in persisted config, got:\n%s", content)
+	}
+	for _, field := range []string{`"max_workspaces"`, `"state_dir"`, `"clone_backend"`} {
+		if strings.Contains(content, field) {
+			t.Fatalf("expected %s to be omitted in minimal persisted config, got:\n%s", field, content)
+		}
+	}
+}
+
+func TestLoadOrInitMinimal_DoesNotOverwriteExistingConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, config.GroveDirName), 0755); err != nil {
+		t.Fatalf("mkdir .grove: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, config.GroveDirName, config.ConfigFile),
+		[]byte(`{"workspace_dir":"/custom/workspaces","max_workspaces":7,"clone_backend":"image"}`),
+		0644,
+	); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+
+	cfg, initialized, err := config.LoadOrInitMinimal(dir)
+	if err != nil {
+		t.Fatalf("LoadOrInitMinimal() error = %v", err)
+	}
+	if initialized {
+		t.Fatal("expected initialized=false when config already exists")
+	}
+	if cfg.WorkspaceDir != "/custom/workspaces" {
+		t.Fatalf("expected workspace_dir preserved, got %q", cfg.WorkspaceDir)
+	}
+	if cfg.MaxWorkspaces != 7 {
+		t.Fatalf("expected max_workspaces preserved as 7, got %d", cfg.MaxWorkspaces)
+	}
+	if cfg.CloneBackend != "image" {
+		t.Fatalf("expected clone_backend preserved as image, got %q", cfg.CloneBackend)
+	}
+}
+
 func TestLoadOrDefault_NoConfig(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, config.GroveDirName), 0755)
