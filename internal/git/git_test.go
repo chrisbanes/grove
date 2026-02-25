@@ -162,6 +162,60 @@ func TestPush_ErrorIncludesGitOutput(t *testing.T) {
 	}
 }
 
+func TestPull_DeletedUpstreamRef_FallsBackToDefaultBranch(t *testing.T) {
+	// Set up a bare "remote" repo and seed it with a commit on main.
+	remoteRoot := t.TempDir()
+	bareRepo := filepath.Join(remoteRoot, "remote.git")
+	run(t, remoteRoot, "git", "init", "--bare", bareRepo)
+
+	seedRepo := t.TempDir()
+	run(t, remoteRoot, "git", "clone", bareRepo, seedRepo)
+	run(t, seedRepo, "git", "config", "user.email", "test@test.com")
+	run(t, seedRepo, "git", "config", "user.name", "Test")
+	os.WriteFile(filepath.Join(seedRepo, "README.md"), []byte("# seed"), 0644)
+	run(t, seedRepo, "git", "add", ".")
+	run(t, seedRepo, "git", "commit", "-m", "seed")
+	branch := runOutput(t, seedRepo, "git", "branch", "--show-current")
+	run(t, seedRepo, "git", "push", "-u", "origin", branch)
+
+	// Create a feature branch on the remote, then delete it.
+	run(t, seedRepo, "git", "checkout", "-b", "cb/grove-config")
+	os.WriteFile(filepath.Join(seedRepo, "config.txt"), []byte("config"), 0644)
+	run(t, seedRepo, "git", "add", ".")
+	run(t, seedRepo, "git", "commit", "-m", "config branch")
+	run(t, seedRepo, "git", "push", "-u", "origin", "cb/grove-config")
+
+	// Clone into localRepo, checked out on cb/grove-config tracking the remote.
+	localRepo := t.TempDir()
+	run(t, remoteRoot, "git", "clone", "-b", "cb/grove-config", bareRepo, localRepo)
+	run(t, localRepo, "git", "config", "user.email", "test@test.com")
+	run(t, localRepo, "git", "config", "user.name", "Test")
+
+	// Delete the remote branch so the tracked ref no longer exists.
+	run(t, seedRepo, "git", "push", "origin", "--delete", "cb/grove-config")
+
+	// Push a new commit to main so there's something to pull.
+	run(t, seedRepo, "git", "checkout", branch)
+	os.WriteFile(filepath.Join(seedRepo, "new-file.txt"), []byte("new"), 0644)
+	run(t, seedRepo, "git", "add", ".")
+	run(t, seedRepo, "git", "commit", "-m", "new on main")
+	run(t, seedRepo, "git", "push", "origin", branch)
+
+	// Pull should succeed by falling back to the default branch.
+	if err := git.Pull(localRepo); err != nil {
+		t.Fatalf("expected pull to succeed when upstream ref is deleted, got: %v", err)
+	}
+
+	// Verify local repo is now on the default branch and has the new commit.
+	currentBranch, _ := git.CurrentBranch(localRepo)
+	if currentBranch != branch {
+		t.Fatalf("expected branch %s after fallback pull, got %s", branch, currentBranch)
+	}
+	if _, err := os.Stat(filepath.Join(localRepo, "new-file.txt")); err != nil {
+		t.Fatalf("expected pulled file in local repo, got: %v", err)
+	}
+}
+
 func TestPull_WithoutUpstream_UsesCurrentBranchAndSetsTracking(t *testing.T) {
 	remoteRoot := t.TempDir()
 	bareRepo := filepath.Join(remoteRoot, "remote.git")
